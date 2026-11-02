@@ -1,0 +1,119 @@
+// Personal Trading Intelligence — data layer
+// Local-first trading analytics schema (SQLite)
+
+generator client {
+  provider      = "prisma-client-js"
+  // "windows" engine is bundled so the desktop build runs on Windows,
+  // while "native" keeps local (Linux/macOS) development working.
+  binaryTargets = ["native", "windows"]
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// One trading account (structure ready for multiple accounts)
+model Account {
+  id             String   @id @default("demo")
+  name           String
+  broker         String
+  server         String
+  mt5Login       String?
+  currency       String   @default("USD")
+  leverage       Int      @default(100)
+  initialBalance Float
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  trades     Trade[]
+  snapshots  EquitySnapshot[]
+  cashflows  CashFlow[]
+  strategies Strategy[]
+  syncLogs   SyncLog[]
+}
+
+// A single trade file = one MT5 Position (all deals of the position merged)
+model Trade {
+  id             String    @id @default(cuid())
+  accountId      String
+  account        Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  positionId     Int       @unique // MT5 position ticket
+  symbol         String
+  direction      String // BUY | SELL
+  volume         Float // lots
+  openTime       DateTime
+  closeTime      DateTime?
+  openPrice      Float
+  closePrice     Float?
+  stopLoss       Float?
+  takeProfit     Float?
+  commission     Float     @default(0)
+  swap           Float     @default(0)
+  profit         Float     @default(0)
+  netProfit      Float     @default(0) // profit + commission + swap
+  pips           Float?
+  rMultiple      Float?
+  holdingMinutes Int?
+  status         String    @default("CLOSED") // OPEN | CLOSED
+  strategyId     String?
+  strategy       Strategy? @relation(fields: [strategyId], references: [id], onDelete: SetNull)
+  tags           String    @default("[]") // JSON array of strings
+  mistakes       String    @default("[]") // JSON array of strings
+  emotion        String?
+  notes          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([accountId, closeTime])
+  @@index([accountId, status])
+  @@index([symbol])
+}
+
+// Periodic balance/equity snapshots (for floating drawdown measurement)
+model EquitySnapshot {
+  id        String   @id @default(cuid())
+  accountId String
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  ts        DateTime
+  balance   Float
+  equity    Float
+
+  @@unique([accountId, ts])
+}
+
+// Deposits / withdrawals — kept separate from trading profit
+model CashFlow {
+  id        String   @id @default(cuid())
+  accountId String
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  ts        DateTime
+  type      String // DEPOSIT | WITHDRAWAL
+  amount    Float
+  comment   String?
+
+  @@index([accountId, ts])
+}
+
+model Strategy {
+  id          String  @id @default(cuid())
+  accountId   String
+  account     Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  trades      Trade[]
+
+  @@unique([accountId, name])
+}
+
+model SyncLog {
+  id             String   @id @default(cuid())
+  accountId      String
+  account        Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  ts             DateTime @default(now())
+  source         String   @default("MT5_SYNC")
+  status         String   @default("OK")
+  message        String
+  tradesInserted Int      @default(0)
+  tradesUpdated  Int      @default(0)
+}

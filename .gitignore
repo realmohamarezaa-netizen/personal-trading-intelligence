@@ -1,0 +1,78 @@
+# ─── Dependencies ─────────────────────────────────────────────
+node_modules/
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# ─── Next.js ──────────────────────────────────────────────────
+/.next/
+/out/
+/build/
+next-env.d.ts
+*.tsbuildinfo
+
+# ─── Environment (never commit real config) ───────────────────
+.env
+.env.local
+.env.*.local
+
+# ─── Database (user data — never commit) ──────────────────────
+db/*.db
+db/*.db-journal
+db/*.sqlite
+*.sqlite3
+
+# ─── Build artifacts & distributions ──────────────────────────
+public/*.zip
+public/*.exe
+*.deb
+*.appx
+python-embed.zip
+dist/
+release/
+desktop-dist/
+
+# ─── Python ───────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+
+# ─── Logs & debug ─────────────────────────────────────────────
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+logs/
+
+# ─── OS / editor ──────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.pem
+.idea/
+
+# ─── Sandbox / local workspace (not part of the product) ──────
+local-*
+.claude
+.z-ai-config
+.zscripts
+agent-ctx
+tool-results
+skills/
+examples/
+mini-services/
+tests/
+download/
+prompt
+test
+
+# ─── Vercel ───────────────────────────────────────────────────
+.vercel
+Caddyfile

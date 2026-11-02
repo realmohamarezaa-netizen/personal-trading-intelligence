@@ -1,0 +1,70 @@
+// Server-side data loader shared by all API routes
+import { db } from './db'
+import type { EngineInput, EngineTrade } from './analytics'
+
+function parseJsonArray(s: string | null): string[] {
+  if (!s) return []
+  try {
+    const v = JSON.parse(s)
+    return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+export async function loadEngineInput(): Promise<EngineInput | null> {
+  const account = await db.account.findFirst({
+    include: { strategies: { select: { id: true, name: true, description: true } } },
+  })
+  if (!account) return null
+
+  const [trades, cashflows, lastSync] = await Promise.all([
+    db.trade.findMany({ orderBy: { openTime: 'asc' } }),
+    db.cashFlow.findMany({ orderBy: { ts: 'asc' } }),
+    db.syncLog.findFirst({ orderBy: { ts: 'desc' } }),
+  ])
+
+  const engineTrades: EngineTrade[] = trades.map((t) => ({
+    id: t.id,
+    positionId: t.positionId,
+    symbol: t.symbol,
+    direction: t.direction === 'SELL' ? 'SELL' : 'BUY',
+    volume: t.volume,
+    openTime: t.openTime,
+    closeTime: t.closeTime,
+    openPrice: t.openPrice,
+    closePrice: t.closePrice,
+    stopLoss: t.stopLoss,
+    takeProfit: t.takeProfit,
+    commission: t.commission,
+    swap: t.swap,
+    profit: t.profit,
+    netProfit: t.netProfit,
+    pips: t.pips,
+    rMultiple: t.rMultiple,
+    holdingMinutes: t.holdingMinutes,
+    status: t.status,
+    strategyId: t.strategyId,
+    tags: parseJsonArray(t.tags),
+    mistakes: parseJsonArray(t.mistakes),
+    emotion: t.emotion,
+  }))
+
+  return {
+    account: {
+      id: account.id,
+      name: account.name,
+      broker: account.broker,
+      server: account.server,
+      mt5Login: account.mt5Login,
+      currency: account.currency,
+      leverage: account.leverage,
+      initialBalance: account.initialBalance,
+    },
+    strategies: account.strategies,
+    trades: engineTrades,
+    cashflows: cashflows.map((c) => ({ ts: c.ts, type: c.type as 'DEPOSIT' | 'WITHDRAWAL', amount: c.amount })),
+    lastSyncAt: lastSync?.ts ?? null,
+    demoMode: !lastSync,
+  }
+}
