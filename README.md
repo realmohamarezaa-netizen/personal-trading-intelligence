@@ -16,7 +16,7 @@ Built with Next.js 16 · TypeScript · Prisma · SQLite · Electron
 [![Electron](https://img.shields.io/badge/Electron-desktop-47848F?style=flat-square&logo=electron&logoColor=white)](https://www.electronjs.org)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-0078D6?style=flat-square&logo=windows&logoColor=white)](#-نصب-برنامه-دسکتاپ-ویندوز)
 [![License: MIT](https://img.shields.io/badge/License-MIT-3fb950?style=flat-square)](LICENSE)
-[![CI](https://github.com/realmohamadarezaa-netizen/personal-trading-intelligence/actions/workflows/ci.yml/badge.svg)](https://github.com/realmohamadarezaa-netizen/personal-trading-intelligence/actions/workflows/ci.yml)
+[![CI](https://github.com/realmohamarezaa-netizen/personal-trading-intelligence/actions/workflows/ci.yml/badge.svg)](https://github.com/realmohamarezaa-netizen/personal-trading-intelligence/actions/workflows/ci.yml)
 
 </div>
 
@@ -106,7 +106,7 @@ Built with Next.js 16 · TypeScript · Prisma · SQLite · Electron
 
 ```bash
 # 1) کلون و نصب وابستگی‌ها
-git clone https://github.com/realmohamadarezaa-netizen/personal-trading-intelligence.git
+git clone https://github.com/realmohamarezaa-netizen/personal-trading-intelligence.git
 cd personal-trading-intelligence
 npm install          # یا: bun install
 

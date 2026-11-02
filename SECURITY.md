@@ -12,7 +12,7 @@ Security-relevant design decisions:
 
 ## Reporting a Vulnerability
 
-Please open a [GitHub Security Advisory](https://github.com/realmohamadarezaa-netizen/personal-trading-intelligence/security/advisories/new)
+Please open a [GitHub Security Advisory](https://github.com/realmohamarezaa-netizen/personal-trading-intelligence/security/advisories/new)
 or a regular issue describing the problem. Do not include real account data in reports.
 
 ## Data Handling
