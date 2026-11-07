@@ -1,11 +1,15 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { ensureSeeded } from '@/lib/server-data'
 import type { SettingsResponse } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
   try {
+    // Demo-first: auto-seed if the local DB is empty (fresh install / reset)
+    await ensureSeeded()
+
     const account = await db.account.findFirst()
     if (!account) {
       return NextResponse.json({ error: 'NO_ACCOUNT' }, { status: 404 })

@@ -1,5 +1,6 @@
 // Server-side data loader shared by all API routes
 import { db } from './db'
+import { reseedDemo } from './seed'
 import type { EngineInput, EngineTrade } from './analytics'
 
 function parseJsonArray(s: string | null): string[] {
@@ -10,6 +11,28 @@ function parseJsonArray(s: string | null): string[] {
   } catch {
     return []
   }
+}
+
+// In-flight seed guard — prevents concurrent requests from seeding twice.
+let seeding: Promise<void> | null = null
+
+/**
+ * Self-healing data bootstrap: this is a demo-first, local-only app.
+ * If the database has no account (fresh install, db:push reset, manual wipe),
+ * seed the deterministic demo dataset automatically so the UI never breaks
+ * with a raw NO_ACCOUNT error. Real MT5 sync later replaces demo data.
+ */
+export async function ensureSeeded(): Promise<void> {
+  const account = await db.account.findFirst()
+  if (account) return
+  if (!seeding) {
+    seeding = reseedDemo()
+      .then(() => undefined)
+      .finally(() => {
+        seeding = null
+      })
+  }
+  await seeding
 }
 
 export async function loadEngineInput(): Promise<EngineInput | null> {

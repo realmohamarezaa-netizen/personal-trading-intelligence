@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { computeAnalytics } from '@/lib/analytics'
 import type { RangeKey } from '@/lib/types'
-import { loadEngineInput } from '@/lib/server-data'
+import { loadEngineInput, ensureSeeded } from '@/lib/server-data'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,6 +13,9 @@ export async function GET(req: NextRequest) {
     const rangeParam = (sp.get('range') ?? 'all') as RangeKey
     const range: RangeKey = VALID_RANGES.includes(rangeParam) ? rangeParam : 'all'
     const symbol = sp.get('symbol') ?? undefined
+
+    // Demo-first: auto-seed if the local DB is empty (fresh install / reset)
+    await ensureSeeded()
 
     const input = await loadEngineInput()
     if (!input) {

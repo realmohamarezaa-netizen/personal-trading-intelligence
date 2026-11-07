@@ -107,6 +107,20 @@ function StatusPill({ data }: { data: AnalyticsData | undefined }) {
   )
 }
 
+function friendlyError(err: unknown): string {
+  const code = err instanceof Error ? err.message : ''
+  switch (code) {
+    case 'NO_ACCOUNT':
+      return 'No account data found. Demo data is prepared automatically — please retry.'
+    case 'ANALYTICS_FAILED':
+      return 'Analytics engine failed to compute your data. Please retry.'
+    case 'JOURNAL_FAILED':
+      return 'Could not load the trading journal. Please retry.'
+    default:
+      return code || 'Unknown error — check that the local server is running.'
+  }
+}
+
 function AppInner() {
   const [section, setSection] = useState<SectionKey>('overview')
   const [range, setRange] = useState<RangeKey>('all')
@@ -302,9 +316,7 @@ function AppInner() {
                 <div className="flex max-w-md flex-col items-center gap-3 rounded-xl border border-[var(--neg)]/25 bg-[var(--neg)]/5 p-6 text-center">
                   <AlertTriangle className="h-8 w-8 text-[var(--neg)]" />
                   <div className="text-sm font-semibold">Failed to load analytics</div>
-                  <p className="text-xs text-muted-foreground">
-                    {error instanceof Error ? error.message : 'Unknown error'}
-                  </p>
+                  <p className="text-xs text-muted-foreground">{friendlyError(error)}</p>
                   <Button size="sm" variant="outline" onClick={() => refetch()}>
                     <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Retry
                   </Button>

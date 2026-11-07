@@ -79,3 +79,4 @@ Caddyfile
 
 # ─── Isolated desktop build output ──────────────
 .next-desktop/
+upload/
