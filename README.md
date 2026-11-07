@@ -88,6 +88,12 @@ Built with Next.js 16 · TypeScript · Prisma · SQLite · Electron
 
 </details>
 
+### ⬇ دانلود از گیت‌هاب
+
+- **نصاب ویندوز (ZIP):** از صفحهٔ [Releases](https://github.com/realmohamarezaa-netizen/personal-trading-intelligence/releases/latest) فایل `PTI-Setup-x.y.z.zip` را دانلود کنید — استخراج کنید و `PTI-Setup-x.y.z.exe` را اجرا کنید
+- **سورس کامل پروژه (ZIP):** روی دکمهٔ سبز **Code** کلیک کنید و **Download ZIP** را بزنید، یا مستقیم:
+  <https://github.com/realmohamarezaa-netizen/personal-trading-intelligence/archive/refs/heads/main.zip>
+
 ### ⬇ دانلود نصاب از داخل خود برنامه
 
 صفحهٔ **Settings** داشبورد یک بخش «دانلود نسخهٔ ویندوز» دارد:
