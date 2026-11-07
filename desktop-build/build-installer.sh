@@ -34,12 +34,20 @@ mkdir -p "$STAGE/app/resources/app"
 echo "=== [2/8] Next.js standalone -> app/resources/app/server ==="
 cp -r "$NEXT_DIST/standalone/." "$STAGE/app/resources/app/server/"
 
-# standalone output does NOT include static assets — copy them manually
-echo "=== [2b/8] Static assets (.next/static, public/) ==="
-mkdir -p "$STAGE/app/resources/app/server/.next"
-cp -r "$NEXT_DIST/static" "$STAGE/app/resources/app/server/.next/static"
+# standalone output does NOT include static assets — copy them manually.
+# IMPORTANT: the server serves /_next/static from <serverDir>/<distDir>/static,
+# where distDir is baked into required-server-files.json at build time
+# (e.g. ".next-desktop"). Copying to ".next/static" would 404 every CSS/JS
+# chunk and the installed app would render unstyled HTML.
+echo "=== [2b/8] Static assets (<distDir>/static, public/) ==="
+DIST_NAME="$(basename "$NEXT_DIST")"
+mkdir -p "$STAGE/app/resources/app/server/$DIST_NAME"
+cp -r "$NEXT_DIST/static" "$STAGE/app/resources/app/server/$DIST_NAME/static"
+# Replace public/ cleanly: cp -r into an existing standalone public/ would
+# nest public/public/ and could smuggle the previous installer exe inside
+# itself, so wipe it first, then copy, then strip exes/zips from the payload.
+rm -rf "$STAGE/app/resources/app/server/public"
 cp -r "$ROOT/public" "$STAGE/app/resources/app/server/public"
-# keep the installer lean: never nest the setup exe / big archives inside itself
 rm -f "$STAGE/app/resources/app/server/public"/PTI-Setup-*.exe \
       "$STAGE/app/resources/app/server/public"/*.zip
 

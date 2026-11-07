@@ -15,11 +15,18 @@ function installerPath(): string {
   return path.join(process.cwd(), 'public', INSTALLER_FILE_NAME)
 }
 
-// Hashing a ~300 MB file takes a moment — compute once, cache for process lifetime
-let sha256Cache: { file: string; hash: string } | null = null
+// Hashing a ~300 MB file takes a moment — compute once, then reuse while the
+// file is unchanged (keyed on path + mtime + size so a rebuilt installer
+// invalidates the cache automatically instead of serving a stale hash).
+let sha256Cache: { key: string; hash: string } | null = null
 
-async function sha256OfFile(filePath: string): Promise<string> {
-  if (sha256Cache?.file === filePath) return sha256Cache.hash
+function cacheKey(filePath: string, stats: Stats): string {
+  return `${filePath}:${stats.mtimeMs}:${stats.size}`
+}
+
+async function sha256OfFile(filePath: string, stats: Stats): Promise<string> {
+  const key = cacheKey(filePath, stats)
+  if (sha256Cache?.key === key) return sha256Cache.hash
   const hash = await new Promise<string>((resolve, reject) => {
     const h = createHash('sha256')
     const stream = createReadStream(filePath, { highWaterMark: 4 * 1024 * 1024 })
@@ -27,7 +34,7 @@ async function sha256OfFile(filePath: string): Promise<string> {
     stream.on('end', () => resolve(h.digest('hex')))
     stream.on('error', reject)
   })
-  sha256Cache = { file: filePath, hash }
+  sha256Cache = { key, hash }
   return hash
 }
 
@@ -70,7 +77,7 @@ export async function GET(req: Request) {
   }
 
   if (wantsInfo) {
-    const sha256 = await sha256OfFile(filePath)
+    const sha256 = await sha256OfFile(filePath, stats)
     return Response.json({
       available: true,
       fileName: INSTALLER_FILE_NAME,
