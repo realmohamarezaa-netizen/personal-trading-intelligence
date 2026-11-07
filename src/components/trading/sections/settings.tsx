@@ -9,6 +9,7 @@ import {
   CopyCheck,
   Download,
   ExternalLink,
+  FileCheck2,
   Loader2,
   MonitorDown,
   PlugZap,
@@ -19,7 +20,7 @@ import {
 import type { SettingsResponse } from '@/lib/types'
 import { fetchDownloadInfo, fetchSettings, launchMt5Connector, reseedDemoData, stopMt5Connector } from '@/lib/api-client'
 import { fmtBytes, fmtDateTime, fmtMoney } from '@/lib/format'
-import { APP_VERSION, INSTALLER_DOWNLOAD_URL } from '@/lib/app-info'
+import { APP_VERSION } from '@/lib/app-info'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -99,7 +100,9 @@ function InstallerDownloadPanel() {
           <div className="flex flex-col justify-center gap-3 rounded-xl border border-[var(--pos)]/25 bg-[var(--pos)]/8 p-4">
             {data?.available ? (
               <a
-                href={INSTALLER_DOWNLOAD_URL}
+                // href ends with the real .exe filename so the saved file keeps its
+                // extension even when a proxy strips Content-Disposition headers
+                href={`/${data.fileName}`}
                 download={data.fileName}
                 className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[var(--pos)] px-5 text-sm font-bold text-emerald-950 shadow-sm transition hover:bg-[var(--pos)]/85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--pos)]"
               >
@@ -170,12 +173,23 @@ function InstallerDownloadPanel() {
         </div>
       )}
 
-      <div className="mt-3 flex items-start gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
-        <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[var(--pos)]" aria-hidden />
-        <span>
-          بعد از نصب: متاتریدر ۵ را باز و وارد حسابتان شوید → دکمهٔ «Algo Trading» را روشن کنید → در داشبورد
-          «Connect MT5» را بزنید. همین صفحه (Settings) همیشه آخرین نسخهٔ نصاب را برای دانلود ارائه می‌دهد.
-        </span>
+      <div className="mt-3 space-y-2">
+        <div className="flex items-start gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
+          <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[var(--pos)]" aria-hidden />
+          <span>
+            بعد از نصب: متاتریدر ۵ را باز و وارد حسابتان شوید → دکمهٔ «Algo Trading» را روشن کنید → در داشبورد
+            «Connect MT5» را بزنید. همین صفحه (Settings) همیشه آخرین نسخهٔ نصاب را برای دانلود ارائه می‌دهد.
+          </span>
+        </div>
+        <div className="flex items-start gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
+          <FileCheck2 className="mt-0.5 h-4 w-4 shrink-0 text-[var(--warn)]" aria-hidden />
+          <span>
+            فایل دانلودشده باید <Code>{data?.fileName ?? 'PTI-Setup-1.1.0.exe'}</Code> باشد (پسوند{' '}
+            <span className="font-mono">.exe</span>). برای اطمینان از سالم بودن، در PowerShell اجرا کنید:{' '}
+            <Code>certutil -hashfile {data?.fileName ?? 'PTI-Setup-1.1.0.exe'} SHA256</Code> — خروجی باید
+            همین مقدار بالا باشد.
+          </span>
+        </div>
       </div>
     </Panel>
   )
