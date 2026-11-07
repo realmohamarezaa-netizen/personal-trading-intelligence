@@ -5,6 +5,7 @@
 import type { ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  Activity,
   AlertTriangle,
   CopyCheck,
   Download,
@@ -19,7 +20,7 @@ import {
   Square,
 } from 'lucide-react'
 import type { SettingsResponse } from '@/lib/types'
-import { fetchDownloadInfo, fetchSettings, launchMt5Connector, reseedDemoData, stopMt5Connector } from '@/lib/api-client'
+import { fetchDownloadInfo, fetchMt5Status, fetchSettings, launchMt5Connector, reseedDemoData, stopMt5Connector } from '@/lib/api-client'
 import { fmtBytes, fmtDateTime, fmtMoney } from '@/lib/format'
 import { APP_VERSION, INSTALLER_EXE_FILE_NAME, INSTALLER_FILE_NAME } from '@/lib/app-info'
 import { cn } from '@/lib/utils'
@@ -218,6 +219,73 @@ function InstallerDownloadPanel() {
 
 // ─── Section ──────────────────────────────────────────────────────────────────
 
+// ─── MT5 connector diagnostics (live status + connector log tail) ───────────
+
+function Mt5Diagnostics() {
+  const { data: st, refetch, isRefetching } = useQuery({
+    queryKey: ['mt5-status'],
+    queryFn: fetchMt5Status,
+    refetchInterval: 10_000,
+  })
+
+  // Web / dev checkout — the manual guide below is the relevant path there.
+  if (!st?.bundled) return null
+
+  const state: 'SYNCED' | 'WAITING' | 'STOPPED' = st.accountSynced
+    ? 'SYNCED'
+    : st.connectorRunning
+      ? 'WAITING'
+      : 'STOPPED'
+
+  return (
+    <div className="mt-4 rounded-xl border border-border/60 bg-muted/20 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-foreground/90">
+          <Activity className="h-4 w-4 text-muted-foreground" aria-hidden />
+          Connector Diagnostics — وضعیت زندهٔ کانکتور
+          {state === 'SYNCED' && (
+            <Badge className="border-transparent bg-[var(--pos)]/15 text-[var(--pos)]">داده در حال دریافت است</Badge>
+          )}
+          {state === 'WAITING' && (
+            <Badge className="border-transparent bg-[var(--warn)]/15 text-[var(--warn)]">در انتظار اولین همگام‌سازی…</Badge>
+          )}
+          {state === 'STOPPED' && (
+            <Badge variant="outline" className="border-border text-muted-foreground">متوقف</Badge>
+          )}
+        </div>
+        <Button size="sm" variant="ghost" className="h-7 gap-1.5 text-xs" onClick={() => refetch()} disabled={isRefetching}>
+          <RefreshCw className={cn('h-3 w-3', isRefetching && 'animate-spin')} aria-hidden />
+          Refresh
+        </Button>
+      </div>
+
+      {state === 'WAITING' && (
+        <div className="mt-2 flex items-start gap-2 rounded-lg border border-[var(--warn)]/25 bg-[var(--warn)]/10 px-2.5 py-2 text-[11px] leading-relaxed text-[var(--warn)]">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+          <span>
+            اتصال برقرار شده اما هنوز داده‌ای از متاتریدر نرسیده. اگر متاتریدر باز و وارد حسابتان باشد معمولاً چند ثانیه
+            تا یک دقیقه دیگر داده می‌رسد؛ در غیر این صورت دلیل دقیق آن در لاگ زیر نوشته شده است.
+          </span>
+        </div>
+      )}
+
+      {st.logTail ? (
+        <pre
+          dir="ltr"
+          className="num mt-2 max-h-48 overflow-y-auto scroll-slim whitespace-pre-wrap rounded-lg bg-background/60 p-2.5 text-left text-[10.5px] leading-relaxed text-foreground/80"
+        >
+          {st.logTail}
+        </pre>
+      ) : (
+        <p className="mt-2 text-[11px] text-muted-foreground">
+          هنوز لاگی ثبت نشده — پس از زدن «Connect MT5» چند لحظه صبر کنید؛ اگر متاتریدر در دسترس نباشد دلیلش همین‌جا
+          نمایش داده می‌شود.
+        </p>
+      )}
+    </div>
+  )
+}
+
 export function SettingsSection() {
   const { toast } = useToast()
   const queryClient = useQueryClient()
@@ -321,8 +389,12 @@ export function SettingsSection() {
                   <Badge className="border-transparent bg-[var(--warn)]/15 text-[var(--warn)]">
                     DEMO DATA — generated sample
                   </Badge>
-                ) : (
+                ) : data.account.mt5Login ? (
                   <Badge className="border-transparent bg-[var(--pos)]/15 text-[var(--pos)]">MT5 SYNCED</Badge>
+                ) : (
+                  <Badge className="border-transparent bg-[var(--warn)]/15 text-[var(--warn)]">
+                    MT5 CONNECTING — در انتظار اولین همگام‌سازی
+                  </Badge>
                 )}
                 <span className="text-xs text-muted-foreground">
                   Last sync: <span className="num">{fmtDateTime(data.lastSyncAt)}</span>
@@ -381,6 +453,8 @@ export function SettingsSection() {
                 کانکتور فقط-خواندنی است؛ هر ۴۵ ثانیه به‌صورت خودکار همگام می‌شود و با بستن برنامه، خودش متوقف می‌گردد.
               </span>
             </div>
+
+            <Mt5Diagnostics />
 
             <ol className="list-decimal space-y-2 pl-5 text-sm leading-relaxed text-muted-foreground">
               <li>

@@ -46,7 +46,9 @@ export async function GET() {
       })),
       counts: { trades: tradeCount, open: openCount, snapshots: snapCount, cashflows: cfCount },
       lastSyncAt: lastSync ? lastSync.ts.toISOString() : null,
-      demoMode: !lastSync,
+      // 'demo' = seeded sample account; the 'mt5' shell created by Connect MT5
+      // is real-but-empty until the first sync lands (mt5Login is null then).
+      demoMode: account.id === 'demo',
     }
     return NextResponse.json(res)
   } catch (err) {

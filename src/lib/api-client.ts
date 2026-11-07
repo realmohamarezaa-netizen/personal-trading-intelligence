@@ -100,3 +100,20 @@ export async function stopMt5Connector(): Promise<{ ok: boolean; message: string
   const res = await fetch('/api/mt5/stop', { method: 'POST' })
   return handle<{ ok: boolean; message: string }>(res)
 }
+
+export interface Mt5Status {
+  bundled: boolean
+  connectorRunning: boolean
+  connectorPid: number | null
+  accountSynced: boolean
+  awaitingFirstSync: boolean
+  lastSyncLog: { ts: string; source: string; status: string; message: string } | null
+  lastLaunchLog: { ts: string; source: string; status: string; message: string } | null
+  logTail: string | null
+  logFile: string
+}
+
+export async function fetchMt5Status(): Promise<Mt5Status> {
+  const res = await fetch('/api/mt5/status', { cache: 'no-store' })
+  return handle<Mt5Status>(res)
+}

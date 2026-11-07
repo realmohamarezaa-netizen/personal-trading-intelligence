@@ -268,6 +268,44 @@ def _build_trade_from_position(position: Any, hist_commission: Optional[float]) 
 
 
 # ──────────────────────────────── Connection ─────────────────────────────────
+def _terminal_candidates() -> list[str]:
+    """Common MetaTrader 5 terminal paths (portable / multi-terminal setups).
+    The MetaTrader5 package normally locates the terminal via the registry —
+    these fallbacks cover portable installs where that lookup fails."""
+    import glob
+    import os
+
+    pats = [
+        os.path.join(os.environ.get("PROGRAMFILES", r"C:\Program Files"), "MetaTrader 5*", "terminal64.exe"),
+        os.path.join(os.environ.get("PROGRAMFILES(X86)", r"C:\Program Files (x86)"), "MetaTrader 5*", "terminal64.exe"),
+        os.path.join(os.environ.get("LOCALAPPDATA", r"C:\Users\x\AppData\Local"), "Programs", "MetaTrader 5*", "terminal64.exe"),
+    ]
+    out: list[str] = []
+    for pat in pats:
+        for exe in glob.glob(pat):
+            low = exe.lower()
+            if low not in {o.lower() for o in out}:
+                out.append(exe)
+    return out
+
+
+def _initialize_mt5() -> bool:
+    """mt5.initialize() with explicit-path fallbacks; logs the real reason."""
+    if mt5.initialize():
+        return True
+    code, desc = mt5.last_error()
+    for exe in _terminal_candidates():
+        _log(f"plain initialize() failed ({code}) {desc} — trying explicit terminal path: {exe}")
+        if mt5.initialize(path=exe):
+            _log(f"attached to terminal: {exe}")
+            return True
+    _err(
+        f"mt5.initialize() failed: ({code}) {desc} — open MetaTrader 5, "
+        "log in to your account and keep the terminal running"
+    )
+    return False
+
+
 def _ensure_login(args: argparse.Namespace) -> bool:
     """Optionally log in via mt5.login(); True when the terminal is ready."""
     if args.login is None and args.password is None:
@@ -311,12 +349,7 @@ def _print_test_summary(
 # ──────────────────────────────── Sync cycle ─────────────────────────────────
 def run_sync(args: argparse.Namespace) -> bool:
     """One full connect -> collect -> (maybe) POST cycle. Returns success."""
-    if not mt5.initialize():
-        code, desc = mt5.last_error()
-        _err(
-            f"mt5.initialize() failed: ({code}) {desc} — "
-            "make sure the MetaTrader 5 terminal is running and logged in"
-        )
+    if not _initialize_mt5():
         return False
     try:
         if not _ensure_login(args):
@@ -362,6 +395,12 @@ def run_sync(args: argparse.Namespace) -> bool:
             deals_raw = []
 
         merged, cashflows, skipped = merge_history_deals(deals_raw)
+        if not deals_raw:
+            _log(
+                "history window returned 0 deals — if your trades are older than "
+                f"{args.days} days, open 'Account History' in MetaTrader 5, "
+                "right-click and choose 'All Periods', then wait for the next cycle"
+            )
         live_ids = {int(p.ticket) for p in positions_raw}
 
         # Live positions win over their history group: the dashboard keys trades

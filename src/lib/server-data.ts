@@ -83,6 +83,9 @@ export async function loadEngineInput(): Promise<EngineInput | null> {
     trades: engineTrades,
     cashflows: cashflows.map((c) => ({ ts: c.ts, type: c.type as 'DEPOSIT' | 'WITHDRAWAL', amount: c.amount })),
     lastSyncAt: lastSync?.ts ?? null,
-    demoMode: !lastSync,
+    // Demo is the seeded 'demo' account — NOT "no sync log yet": the connector
+    // launch itself writes a log row, which must not make the pill claim
+    // "MT5 SYNCED" before any real sync arrives.
+    demoMode: account.id === 'demo',
   }
 }

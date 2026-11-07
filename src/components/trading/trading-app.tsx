@@ -79,11 +79,16 @@ function TehranClock() {
 
 function StatusPill({ data }: { data: AnalyticsData | undefined }) {
   const demo = data?.meta.demoMode ?? true
+  // Honest states: demo account / real account waiting for its first MT5 sync
+  // (connector launched but the shell account has no mt5 login yet) / synced.
+  const connecting = !demo && data?.account != null && !data.account.mt5Login
+  const label = demo ? 'DEMO DATA' : connecting ? 'MT5 CONNECTING…' : 'MT5 SYNCED'
+  const amber = demo || connecting
   return (
     <span
       className={cn(
         'inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-semibold tracking-wide',
-        demo
+        amber
           ? 'border-[var(--warn)]/30 bg-[var(--warn)]/10 text-[var(--warn)]'
           : 'border-[var(--pos)]/30 bg-[var(--pos)]/10 text-[var(--pos)]'
       )}
@@ -92,17 +97,17 @@ function StatusPill({ data }: { data: AnalyticsData | undefined }) {
         <span
           className={cn(
             'absolute inline-flex h-full w-full animate-ping rounded-full opacity-60',
-            demo ? 'bg-[var(--warn)]' : 'bg-[var(--pos)]'
+            amber ? 'bg-[var(--warn)]' : 'bg-[var(--pos)]'
           )}
         />
         <span
           className={cn(
             'relative inline-flex h-1.5 w-1.5 rounded-full',
-            demo ? 'bg-[var(--warn)]' : 'bg-[var(--pos)]'
+            amber ? 'bg-[var(--warn)]' : 'bg-[var(--pos)]'
           )}
         />
       </span>
-      {demo ? 'DEMO DATA' : 'MT5 SYNCED'}
+      {label}
     </span>
   )
 }
