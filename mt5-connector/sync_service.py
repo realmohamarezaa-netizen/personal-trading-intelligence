@@ -32,6 +32,16 @@ from typing import Optional
 # if the native MetaTrader5 package cannot load, the service must stay alive
 # and report the reason every cycle instead of dying silently at startup.
 
+# The embeddable Python runtime (python312._pth) runs in ISOLATED mode:
+# sys.path holds only what is listed in the ._pth file and the script's own
+# directory is never prepended (unlike a normal python install). `sync.py`
+# sits next to this file, so add that folder to sys.path explicitly —
+# otherwise `from sync import run_sync` fails with ModuleNotFoundError on
+# every cycle while MetaTrader5/requests (site-packages) import fine.
+_CONNECTOR_DIR = os.path.dirname(os.path.abspath(__file__))
+if _CONNECTOR_DIR not in sys.path:
+    sys.path.insert(0, _CONNECTOR_DIR)
+
 
 def _log(msg: str) -> None:
     print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}", flush=True)
