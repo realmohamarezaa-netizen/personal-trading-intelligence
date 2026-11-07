@@ -13,14 +13,13 @@ export async function GET(req: NextRequest) {
     const rangeParam = (sp.get('range') ?? 'all') as RangeKey
     const range: RangeKey = VALID_RANGES.includes(rangeParam) ? rangeParam : 'all'
     const symbol = sp.get('symbol') ?? undefined
-    const strategyId = sp.get('strategy') ?? undefined
 
     const input = await loadEngineInput()
     if (!input) {
       return NextResponse.json({ error: 'NO_ACCOUNT' }, { status: 404 })
     }
 
-    const data = computeAnalytics(input, { range, symbol, strategyId })
+    const data = computeAnalytics(input, { range, symbol })
     return NextResponse.json(data)
   } catch (err) {
     console.error('[api/analytics]', err)

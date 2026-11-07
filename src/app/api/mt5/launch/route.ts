@@ -70,7 +70,7 @@ export async function POST(_req: NextRequest) {
     let wipedDemo = false
     const demoAccount = await db.account.findUnique({ where: { id: 'demo' } })
     if (demoAccount) {
-      await db.account.delete({ where: { id: 'demo' } }) // cascades trades, snapshots, cashflows, strategies
+      await db.account.delete({ where: { id: 'demo' } }) // cascades trades, snapshots, cashflows
       wipedDemo = true
     }
 

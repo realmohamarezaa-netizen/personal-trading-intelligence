@@ -36,7 +36,6 @@ export interface OpenPosition {
   profit: number
   swap: number
   commission: number
-  strategyName: string | null
   durationMinutes: number
 }
 
@@ -218,28 +217,6 @@ export interface RiskAnalysis {
   openExposure: { symbol: string; volume: number }[]
 }
 
-export interface StrategyStat {
-  id: string
-  name: string
-  description: string | null
-  trades: number
-  winRate: number
-  profitFactor: number
-  expectancy: number
-  expectancyR: number | null
-  netPnl: number
-  avgR: number | null
-  bestSymbol: string | null
-  worstSymbol: string | null
-}
-
-export interface TagStat {
-  tag: string
-  count: number
-  pnl: number
-  winRate: number
-}
-
 export interface AlertItem {
   id: string
   severity: AlertSeverity
@@ -261,10 +238,8 @@ export interface AnalyticsData {
   symbols: SymbolStat[]
   directions: DirectionStat[]
   risk: RiskAnalysis
-  strategies: StrategyStat[]
-  tagStats: TagStat[]
   mistakeStats: MistakeStatLite[]
-  emotionStats: TagStat[]
+  emotionStats: EmotionStat[]
   openPositions: OpenPosition[]
   alerts: AlertItem[]
   meta: {
@@ -278,6 +253,13 @@ export interface MistakeStatLite {
   mistake: string
   count: number
   cost: number
+}
+
+export interface EmotionStat {
+  tag: string
+  count: number
+  pnl: number
+  winRate: number
 }
 
 export interface JournalTrade {
@@ -300,9 +282,6 @@ export interface JournalTrade {
   rMultiple: number | null
   holdingMinutes: number | null
   status: string
-  strategyId: string | null
-  strategyName: string | null
-  tags: string[]
   mistakes: string[]
   emotion: string | null
   notes: string | null
@@ -315,7 +294,6 @@ export interface JournalResponse {
 
 export interface SettingsResponse {
   account: AccountInfo
-  strategies: { id: string; name: string; description: string | null; tradeCount: number }[]
   syncLogs: {
     id: string
     ts: string
@@ -331,20 +309,6 @@ export interface SettingsResponse {
 }
 
 // Taxonomy used across journal / insights
-export const TRADE_TAGS = [
-  'Perfect Setup',
-  'A+ Setup',
-  'Early Entry',
-  'Late Entry',
-  'FOMO',
-  'Revenge Trade',
-  'Rule Violation',
-  'News Trade',
-  'Scaled In',
-  'Moved SL',
-  'Partial Exit',
-] as const
-
 export const TRADE_MISTAKES = [
   'No Stop Loss',
   'Oversized Position',

@@ -215,23 +215,27 @@ export function SettingsSection() {
 
             <ol className="list-decimal space-y-2 pl-5 text-sm leading-relaxed text-muted-foreground">
               <li>
-                Install <span className="font-medium text-foreground">Python 3.12 (64-bit)</span> and have the
-                MetaTrader 5 terminal running and logged in (no algo-trading permission needed — the connector is
-                read-only).
+                Open <span className="font-medium text-foreground">MetaTrader 5</span> and log in to your trading
+                account.
               </li>
               <li>
-                Install the connector dependencies: <Code>pip install MetaTrader5 requests</Code>
+                In the MT5 toolbar, turn <span className="font-medium text-foreground">Algo Trading</span>{' '}
+                <span className="text-[var(--pos)] font-semibold">ON</span> — the green button at the top of the
+                terminal. The connector needs it active to attach to the terminal.
               </li>
               <li>
-                Download the connector folder <Code>mt5-connector/</Code> from the project.
+                Click the green <span className="font-medium text-foreground">Connect MT5</span> button above.
               </li>
               <li>
-                Run the sync: <Code>python sync.py --api http://127.0.0.1:3000 --days 180</Code>
-              </li>
-              <li>
-                Keep the dashboard open; data syncs locally — nothing leaves your machine.
+                Done — trades, balance and equity sync automatically and stay updated every 45 seconds.
               </li>
             </ol>
+            <p className="mt-3 text-xs leading-relaxed text-muted-foreground/80">
+              Developer / web mode only: install Python 3.12 (64-bit) +{' '}
+              <Code>pip install MetaTrader5 requests</Code>, then run{' '}
+              <Code>python sync.py --api http://127.0.0.1:3000 --days 180</Code> from the{' '}
+              <Code>mt5-connector/</Code> folder.
+            </p>
 
             <div className="mt-3 flex items-center gap-2 rounded-lg border border-[var(--pos)]/25 bg-[var(--pos)]/8 px-2.5 py-2 text-xs text-[var(--pos)]">
               <ShieldCheck className="h-4 w-4 shrink-0" aria-hidden />

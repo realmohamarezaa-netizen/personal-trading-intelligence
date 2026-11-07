@@ -29,7 +29,6 @@ model Account {
   trades     Trade[]
   snapshots  EquitySnapshot[]
   cashflows  CashFlow[]
-  strategies Strategy[]
   syncLogs   SyncLog[]
 }
 
@@ -56,9 +55,6 @@ model Trade {
   rMultiple      Float?
   holdingMinutes Int?
   status         String    @default("CLOSED") // OPEN | CLOSED
-  strategyId     String?
-  strategy       Strategy? @relation(fields: [strategyId], references: [id], onDelete: SetNull)
-  tags           String    @default("[]") // JSON array of strings
   mistakes       String    @default("[]") // JSON array of strings
   emotion        String?
   notes          String?
@@ -93,17 +89,6 @@ model CashFlow {
   comment   String?
 
   @@index([accountId, ts])
-}
-
-model Strategy {
-  id          String  @id @default(cuid())
-  accountId   String
-  account     Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  name        String
-  description String?
-  trades      Trade[]
-
-  @@unique([accountId, name])
 }
 
 model SyncLog {

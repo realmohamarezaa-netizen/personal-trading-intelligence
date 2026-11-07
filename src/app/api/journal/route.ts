@@ -26,9 +26,7 @@ export async function GET(req: NextRequest) {
     const sp = req.nextUrl.searchParams
     const range = (sp.get('range') ?? 'all') as RangeKey
     const symbol = sp.get('symbol')
-    const strategyId = sp.get('strategy')
     const result = sp.get('result') // win | loss | be
-    const tag = sp.get('tag')
     const mistake = sp.get('mistake')
     const q = sp.get('q')
     const status = sp.get('status') // OPEN | CLOSED | null(all)
@@ -39,12 +37,8 @@ export async function GET(req: NextRequest) {
 
     const where: Record<string, unknown> = {}
     if (symbol) where.symbol = symbol
-    if (strategyId) where.strategyId = strategyId === 'unassigned' ? null : strategyId
     if (status === 'OPEN' || status === 'CLOSED') where.status = status
     if (from) where.closeTime = { gte: from }
-
-    const strategies = await db.strategy.findMany({ select: { id: true, name: true } })
-    const stratName = new Map(strategies.map((s) => [s.id, s.name]))
 
     let trades = await db.trade.findMany({
       where,
@@ -57,7 +51,6 @@ export async function GET(req: NextRequest) {
     else if (result === 'loss') trades = trades.filter((t) => t.status === 'CLOSED' && t.netProfit < -0.0001)
     else if (result === 'be') trades = trades.filter((t) => t.status === 'CLOSED' && Math.abs(t.netProfit) <= 0.0001)
 
-    if (tag) trades = trades.filter((t) => parseJsonArray(t.tags).includes(tag))
     if (mistake) trades = trades.filter((t) => parseJsonArray(t.mistakes).includes(mistake))
     if (q) {
       const needle = q.toLowerCase()
@@ -91,9 +84,6 @@ export async function GET(req: NextRequest) {
       rMultiple: t.rMultiple,
       holdingMinutes: t.holdingMinutes,
       status: t.status,
-      strategyId: t.strategyId,
-      strategyName: t.strategyId ? (stratName.get(t.strategyId) ?? null) : null,
-      tags: parseJsonArray(t.tags),
       mistakes: parseJsonArray(t.mistakes),
       emotion: t.emotion,
       notes: t.notes,

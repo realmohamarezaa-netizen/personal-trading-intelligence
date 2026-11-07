@@ -1,11 +1,13 @@
 // Renders icon.svg to PNGs and assembles a PNG-compressed .ico + icon.png
+// Usage: node make-icons.mjs <icon.svg> <output-dir>
 import { createRequire } from 'module'
 const require = createRequire('/home/z/my-project/')
 const sharp = require('sharp')
 import fs from 'fs'
 
+const [, , svgPath = '/home/z/my-project/desktop-build/icon.svg', outDir = '/home/z/pti-stage/app/resources/app'] = process.argv
 const SIZES = [16, 24, 32, 48, 64, 128, 256, 512]
-const svg = fs.readFileSync('/home/z/pti-desktop/icon.svg')
+const svg = fs.readFileSync(svgPath)
 
 const pngs = {}
 for (const size of SIZES) {
@@ -17,7 +19,7 @@ for (const size of SIZES) {
 }
 
 // 512px png for the Electron window icon
-fs.writeFileSync('/home/z/pti-desktop/app/resources/app/icon.png', pngs[512])
+fs.writeFileSync(`${outDir}/icon.png`, pngs[512])
 
 // ICO: header + directory entries + embedded PNGs
 const entrySizes = [16, 24, 32, 48, 64, 128, 256]
@@ -42,5 +44,5 @@ entrySizes.forEach((size, i) => {
 })
 
 const ico = Buffer.concat([header, dir, ...entrySizes.map((s) => pngs[s])])
-fs.writeFileSync('/home/z/pti-desktop/app/resources/app/icon.ico', ico)
+fs.writeFileSync(`${outDir}/icon.ico`, ico)
 console.log('icon.ico bytes:', ico.length, '| icon.png bytes:', pngs[512].length)

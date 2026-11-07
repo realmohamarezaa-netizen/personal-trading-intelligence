@@ -3,7 +3,7 @@ Unicode true
 !include "MUI2.nsh"
 
 !define APPNAME "Personal Trading Intelligence"
-!define APPVER  "1.0.0"
+!define APPVER  "1.1.0"
 !define UNINSTKEY "TradingIntelligence"
 
 Name "${APPNAME} ${APPVER}"

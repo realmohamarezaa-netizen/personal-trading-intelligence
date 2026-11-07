@@ -10,16 +10,13 @@ import type {
 export interface AnalyticsFilters {
   range: RangeKey
   symbol?: string
-  strategyId?: string
 }
 
 export interface JournalFilters {
   range: RangeKey
   symbol?: string
-  strategyId?: string
   result?: 'win' | 'loss' | 'be'
   status?: 'OPEN' | 'CLOSED'
-  tag?: string
   mistake?: string
   q?: string
   limit?: number
@@ -42,7 +39,6 @@ async function handle<T>(res: Response): Promise<T> {
 export async function fetchAnalytics(f: AnalyticsFilters): Promise<AnalyticsData> {
   const params = new URLSearchParams({ range: f.range })
   if (f.symbol) params.set('symbol', f.symbol)
-  if (f.strategyId) params.set('strategy', f.strategyId)
   const res = await fetch(`/api/analytics?${params.toString()}`, { cache: 'no-store' })
   return handle<AnalyticsData>(res)
 }
@@ -50,10 +46,8 @@ export async function fetchAnalytics(f: AnalyticsFilters): Promise<AnalyticsData
 export async function fetchJournal(f: JournalFilters): Promise<JournalResponse> {
   const params = new URLSearchParams({ range: f.range })
   if (f.symbol) params.set('symbol', f.symbol)
-  if (f.strategyId) params.set('strategy', f.strategyId)
   if (f.result) params.set('result', f.result)
   if (f.status) params.set('status', f.status)
-  if (f.tag) params.set('tag', f.tag)
   if (f.mistake) params.set('mistake', f.mistake)
   if (f.q) params.set('q', f.q)
   if (f.limit) params.set('limit', String(f.limit))
@@ -63,7 +57,7 @@ export async function fetchJournal(f: JournalFilters): Promise<JournalResponse> 
 
 export async function updateTrade(
   id: string,
-  body: { tags?: string[]; mistakes?: string[]; emotion?: string | null; strategyId?: string | null; notes?: string | null }
+  body: { mistakes?: string[]; emotion?: string | null; notes?: string | null }
 ): Promise<void> {
   const res = await fetch(`/api/trades/${id}`, {
     method: 'PATCH',

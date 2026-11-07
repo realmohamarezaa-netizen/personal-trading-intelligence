@@ -6,9 +6,7 @@ export const dynamic = 'force-dynamic'
 
 export async function GET() {
   try {
-    const account = await db.account.findFirst({
-      include: { strategies: { include: { _count: { select: { trades: true } } } } },
-    })
+    const account = await db.account.findFirst()
     if (!account) {
       return NextResponse.json({ error: 'NO_ACCOUNT' }, { status: 404 })
     }
@@ -33,12 +31,6 @@ export async function GET() {
         leverage: account.leverage,
         initialBalance: account.initialBalance,
       },
-      strategies: account.strategies.map((s) => ({
-        id: s.id,
-        name: s.name,
-        description: s.description,
-        tradeCount: s._count.trades,
-      })),
       syncLogs: syncLogs.map((l) => ({
         id: l.id,
         ts: l.ts.toISOString(),

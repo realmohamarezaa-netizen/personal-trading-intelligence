@@ -20,9 +20,7 @@ import type {
   RiskAnalysis,
   RHistogramBucket,
   SessionStat,
-  StrategyStat,
   SymbolStat,
-  TagStat,
   TimeAnalysis,
   UnderwaterPoint,
   MistakeStatLite,
@@ -102,8 +100,6 @@ export interface EngineTrade {
   rMultiple: number | null
   holdingMinutes: number | null
   status: string
-  strategyId: string | null
-  tags: string[]
   mistakes: string[]
   emotion: string | null
 }
@@ -119,7 +115,6 @@ export interface EngineInput {
     leverage: number
     initialBalance: number
   }
-  strategies: { id: string; name: string; description: string | null }[]
   trades: EngineTrade[]
   cashflows: { ts: Date; type: 'DEPOSIT' | 'WITHDRAWAL'; amount: number }[]
   lastSyncAt: Date | null
@@ -129,7 +124,6 @@ export interface EngineInput {
 export interface EngineOptions {
   range: RangeKey
   symbol?: string
-  strategyId?: string
 }
 
 // ─── Small utils ─────────────────────────────────────────────────────────────
@@ -173,8 +167,7 @@ export function computeAnalytics(
   const allOpen = input.trades.filter((t) => t.status === 'OPEN')
 
   const matches = (t: EngineTrade): boolean =>
-    (!opts.symbol || t.symbol === opts.symbol) &&
-    (!opts.strategyId || t.strategyId === opts.strategyId)
+    !opts.symbol || t.symbol === opts.symbol
 
   const closed = allClosed.filter(
     (t) => matches(t) && inRange(t.closeTime!, from)
@@ -571,63 +564,7 @@ export function computeAnalytics(
     })),
   }
 
-  // ── Strategy analysis (filtered) ──
-  const strategyList = input.strategies
-  const assigned = closed.filter((t) => t.strategyId)
-  const unassignedCount = closed.length - assigned.length
-  const strategies: StrategyStat[] = strategyList
-    .map((s) => {
-      const ts = closed.filter((t) => t.strategyId === s.id)
-      if (!ts.length) return null
-      const w = ts.filter((t) => t.netProfit > 0.0001)
-      const l = ts.filter((t) => t.netProfit < -0.0001)
-      const gp = sum(w.map((t) => t.netProfit))
-      const gl = Math.abs(sum(l.map((t) => t.netProfit)))
-      const rv = ts.map((t) => t.rMultiple).filter((r): r is number => r !== null)
-      const bySymbol = new Map<string, number>()
-      for (const t of ts) bySymbol.set(t.symbol, (bySymbol.get(t.symbol) ?? 0) + t.netProfit)
-      const sortedSym = [...bySymbol.entries()].sort((a, b) => b[1] - a[1])
-      return {
-        id: s.id,
-        name: s.name,
-        description: s.description,
-        trades: ts.length,
-        winRate: w.length + l.length ? round1((w.length / (w.length + l.length)) * 100) : 0,
-        profitFactor: round2(profitFactor(gp, gl)),
-        expectancy: round2(sum(ts.map((t) => t.netProfit)) / ts.length),
-        expectancyR: rv.length ? round2(mean(rv)) : null,
-        netPnl: round2(sum(ts.map((t) => t.netProfit))),
-        avgR: rv.length ? round2(mean(rv)) : null,
-        bestSymbol: sortedSym.length ? sortedSym[0][0] : null,
-        worstSymbol: sortedSym.length > 1 ? sortedSym[sortedSym.length - 1][0] : null,
-      }
-    })
-    .filter((s): s is StrategyStat => s !== null)
-    .sort((a, b) => b.netPnl - a.netPnl)
-  if (unassignedCount > 0) {
-    const ts = closed.filter((t) => !t.strategyId)
-    const w = ts.filter((t) => t.netProfit > 0.0001)
-    const l = ts.filter((t) => t.netProfit < -0.0001)
-    const gp = sum(w.map((t) => t.netProfit))
-    const gl = Math.abs(sum(l.map((t) => t.netProfit)))
-    strategies.push({
-      id: 'unassigned',
-      name: 'Unassigned',
-      description: 'Trades without a strategy label',
-      trades: ts.length,
-      winRate: w.length + l.length ? round1((w.length / (w.length + l.length)) * 100) : 0,
-      profitFactor: round2(profitFactor(gp, gl)),
-      expectancy: round2(sum(ts.map((t) => t.netProfit)) / ts.length),
-      expectancyR: null,
-      netPnl: round2(sum(ts.map((t) => t.netProfit))),
-      avgR: null,
-      bestSymbol: null,
-      worstSymbol: null,
-    })
-  }
-
-  // ── Tag / mistake / emotion analysis (filtered) ──
-  const tagStats = buildTagStats(closed, (t) => t.tags)
+  // ── Mistake / emotion analysis (filtered) ──
   const emotionStats = buildTagStats(closed, (t) => (t.emotion ? [t.emotion] : []))
   const mistakeStats: MistakeStatLite[] = buildTagStats(closed, (t) => t.mistakes).map((m) => ({
     mistake: m.tag,
@@ -651,7 +588,6 @@ export function computeAnalytics(
       profit: round2(t.profit),
       swap: round2(t.swap),
       commission: round2(t.commission),
-      strategyName: input.strategies.find((s) => s.id === t.strategyId)?.name ?? null,
       durationMinutes: Math.max(0, Math.round((now.getTime() - t.openTime.getTime()) / 60000)),
     }))
 
@@ -669,7 +605,6 @@ export function computeAnalytics(
     currentDdPct,
     curL: streak.curL,
     curW: streak.curW,
-    strategies,
     lastSyncAt: input.lastSyncAt,
     now,
   })
@@ -711,8 +646,6 @@ export function computeAnalytics(
     symbols,
     directions,
     risk,
-    strategies,
-    tagStats,
     mistakeStats,
     emotionStats,
     openPositions,
@@ -785,7 +718,7 @@ function buildHoldingBuckets(closed: EngineTrade[]): HoldingBucket[] {
   })
 }
 
-function buildTagStats(closed: EngineTrade[], pick: (t: EngineTrade) => string[]): TagStat[] {
+function buildTagStats(closed: EngineTrade[], pick: (t: EngineTrade) => string[]): { tag: string; count: number; pnl: number; winRate: number }[] {
   const map = new Map<string, { count: number; pnl: number; wins: number }>()
   for (const t of closed) {
     for (const tag of pick(t)) {
@@ -829,12 +762,11 @@ function buildAlerts(ctx: {
   currentDdPct: number
   curL: number
   curW: number
-  strategies: StrategyStat[]
   lastSyncAt: Date | null
   now: Date
 }): AlertItem[] {
   const alerts: AlertItem[] = []
-  const { input, allClosed, last14, last7, sellStat, currentDdPct, curL, curW, strategies, lastSyncAt, now } = ctx
+  const { input, allClosed, last14, last7, sellStat, currentDdPct, curL, curW, lastSyncAt, now } = ctx
   let seq = 0
   const add = (a: Omit<AlertItem, 'id'>) => alerts.push({ id: `alert-${++seq}`, ...a })
 
@@ -872,7 +804,7 @@ function buildAlerts(ctx: {
     })
   }
 
-  const revenge = last14.filter((t) => t.tags.includes('Revenge Trade') || t.tags.includes('FOMO'))
+  const revenge = last14.filter((t) => t.mistakes.includes('Chased Price') || t.mistakes.includes('Held Past SL mentally'))
   if (revenge.length >= 2) {
     const cost = sum(revenge.map((t) => t.netProfit))
     add({
@@ -883,7 +815,7 @@ function buildAlerts(ctx: {
     })
   }
 
-  const violations = last14.filter((t) => t.mistakes.includes('Rule Violation') || t.tags.includes('Rule Violation'))
+  const violations = last14.filter((t) => t.mistakes.includes('Ignored Setup Rules'))
   if (violations.length >= 2) {
     add({
       severity: 'warning',
@@ -937,16 +869,6 @@ function buildAlerts(ctx: {
       title: 'Large daily loss on record',
       message: `On ${bigLossDay.date} the account lost ${Math.abs(bigLossDay.pnl).toFixed(0)} USD (${bigLossDay.trades} trades) — more than 2% of initial balance in a single day.`,
       metric: `${bigLossDay.pnl.toFixed(0)} USD`,
-    })
-  }
-
-  const edgeStrategy = strategies.find((s) => s.trades >= 30 && s.profitFactor >= 1.4)
-  if (edgeStrategy) {
-    add({
-      severity: 'success',
-      title: 'Statistical edge confirmed',
-      message: `“${edgeStrategy.name}” shows PF ${edgeStrategy.profitFactor.toFixed(2)} over ${edgeStrategy.trades} trades — this is your most robust strategy.`,
-      metric: `PF ${edgeStrategy.profitFactor.toFixed(2)}`,
     })
   }
 

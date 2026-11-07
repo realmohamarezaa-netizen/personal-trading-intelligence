@@ -6,7 +6,7 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronRight, Download, Loader2, RefreshCw, Search } from 'lucide-react'
 import type { AnalyticsData, JournalTrade, RangeKey } from '@/lib/types'
-import { TRADE_EMOTIONS, TRADE_MISTAKES, TRADE_TAGS } from '@/lib/types'
+import { TRADE_EMOTIONS, TRADE_MISTAKES } from '@/lib/types'
 import { fetchJournal, updateTrade } from '@/lib/api-client'
 import { fmtDateTime, fmtDuration, fmtNum, pnlTone } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -121,7 +121,6 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
   // Local filter state
   const [range, setRange] = useState<RangeKey>('30d')
   const [symbol, setSymbol] = useState('')
-  const [strategyId, setStrategyId] = useState('')
   const [result, setResult] = useState<ResultKey>('')
   const [status, setStatus] = useState<StatusKey>('CLOSED')
   const [q, setQ] = useState('')
@@ -130,12 +129,11 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
     () => ({
       range,
       symbol: symbol || undefined,
-      strategyId: strategyId || undefined,
       result: (result || undefined) as 'win' | 'loss' | 'be' | undefined,
       status: (status || undefined) as 'OPEN' | 'CLOSED' | undefined,
       q: q || undefined,
     }),
-    [range, symbol, strategyId, result, status, q]
+    [range, symbol, result, status, q]
   )
 
   const { data: journal, isLoading, isError, error, refetch, isRefetching } = useQuery({
@@ -145,23 +143,20 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
 
   const trades = journal?.trades ?? []
   const netSum = useMemo(() => trades.reduce((acc, t) => acc + t.netProfit, 0), [trades])
+  const commissionSum = useMemo(() => trades.reduce((acc, t) => acc + t.commission, 0), [trades])
 
   // Detail dialog + editor state
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [editTags, setEditTags] = useState<string[]>([])
   const [editMistakes, setEditMistakes] = useState<string[]>([])
   const [editEmotion, setEditEmotion] = useState<string>('')
-  const [editStrategy, setEditStrategy] = useState<string>('unassigned')
   const [editNotes, setEditNotes] = useState<string>('')
 
   const selectedTrade = trades.find((t) => t.id === selectedId) ?? null
 
   function openTrade(t: JournalTrade) {
     setSelectedId(t.id)
-    setEditTags([...t.tags])
     setEditMistakes([...t.mistakes])
     setEditEmotion(t.emotion ?? '')
-    setEditStrategy(t.strategyId ?? 'unassigned')
     setEditNotes(t.notes ?? '')
   }
 
@@ -184,10 +179,8 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
     saveMutation.mutate({
       id: selectedTrade.id,
       body: {
-        tags: editTags,
         mistakes: editMistakes,
         emotion: editEmotion || null,
-        strategyId: editStrategy === 'unassigned' ? null : editStrategy || null,
         notes: editNotes || null,
       },
     })
@@ -200,7 +193,7 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
       'Position ID', 'Symbol', 'Direction', 'Volume', 'Open Time', 'Close Time',
       'Open Price', 'Close Price', 'Stop Loss', 'Take Profit', 'Commission', 'Swap',
       'Profit', 'Net P/L', 'Pips', 'R Multiple', 'Duration (min)', 'Status',
-      'Strategy', 'Tags', 'Mistakes', 'Emotion', 'Notes',
+      'Mistakes', 'Emotion', 'Notes',
     ]
     const esc = (v: unknown) => {
       const s = v === null || v === undefined ? '' : String(v)
@@ -211,8 +204,7 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
         t.positionId, t.symbol, t.direction, t.volume, t.openTime, t.closeTime ?? '',
         t.openPrice, t.closePrice ?? '', t.stopLoss ?? '', t.takeProfit ?? '',
         t.commission, t.swap, t.profit, t.netProfit, t.pips ?? '', t.rMultiple ?? '',
-        t.holdingMinutes ?? '', t.status, t.strategyName ?? '', t.tags.join('; '),
-        t.mistakes.join('; '), t.emotion ?? '', t.notes ?? '',
+        t.holdingMinutes ?? '', t.status, t.mistakes.join('; '), t.emotion ?? '', t.notes ?? '',
       ]
         .map(esc)
         .join(',')
@@ -227,15 +219,9 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
     URL.revokeObjectURL(url)
   }
 
-  const strategyOptions = useMemo(() => {
-    const opts = data.strategies.map((s) => ({ value: s.id, label: s.name }))
-    if (!opts.some((o) => o.value === 'unassigned')) opts.push({ value: 'unassigned', label: 'Unassigned' })
-    return opts
-  }, [data.strategies])
-
   return (
     <div>
-      <SectionHeader title="Trading Journal" subtitle="هر معامله یک پرونده است — ثبت تگ‌ها، اشتباهات و وضعیت روانی">
+      <SectionHeader title="Trading Journal" subtitle="تاریخچهٔ کامل متاتریدر — ثبت اشتباهات، وضعیت روانی و یادداشت هر معامله">
         <Button variant="outline" size="sm" onClick={exportCsv} disabled={trades.length === 0}>
           <Download className="h-3.5 w-3.5" />
           Export CSV
@@ -251,7 +237,6 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
           options={data.symbols.map((s) => ({ value: s.symbol, label: s.symbol }))}
           onChange={setSymbol}
         />
-        <DimensionFilter label="Strategy" value={strategyId} options={strategyOptions} onChange={setStrategyId} />
         <DimensionFilter
           label="Result"
           value={result}
@@ -290,6 +275,10 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
           <span className="num font-semibold">{trades.length}</span>
         </span>
         <span className="inline-flex h-8 items-center gap-2 rounded-lg border border-border/70 bg-muted/30 px-3 text-xs">
+          <span className="text-muted-foreground">Commission (filtered)</span>
+          <PnlValue value={commissionSum} sign={false} className="text-sm font-semibold" />
+        </span>
+        <span className="inline-flex h-8 items-center gap-2 rounded-lg border border-border/70 bg-muted/30 px-3 text-xs">
           <span className="text-muted-foreground">Net P/L (filtered)</span>
           <PnlValue value={netSum} className="text-sm font-semibold" />
         </span>
@@ -302,7 +291,7 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
             <Table>
               <TableHeader className="sticky top-0 z-10 bg-card">
                 <TableRow>
-                  {['#', 'Symbol', 'Volume', 'Open Time', 'Duration', 'Strategy', 'R', 'Tags', 'Net P/L', ''].map((h, i) => (
+                  {['#', 'Symbol', 'Volume', 'Open Time', 'Duration', 'R', 'Commission', 'Net P/L', ''].map((h, i) => (
                     <TableHead key={i} className="text-xs">{h}</TableHead>
                   ))}
                 </TableRow>
@@ -350,9 +339,8 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
                   <TableHead className="text-xs">Volume</TableHead>
                   <TableHead className="text-xs">Open Time</TableHead>
                   <TableHead className="text-xs">Duration</TableHead>
-                  <TableHead className="text-xs">Strategy</TableHead>
                   <TableHead className="text-xs">R</TableHead>
-                  <TableHead className="text-xs">Tags</TableHead>
+                  <TableHead className="text-xs">Commission</TableHead>
                   <TableHead className="text-right text-xs">Net P/L</TableHead>
                   <TableHead aria-label="Open detail" />
                 </TableRow>
@@ -391,9 +379,6 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
                         <TableCell className="num text-xs">{fmtNum(t.volume, 2)}</TableCell>
                         <TableCell className="text-xs text-muted-foreground">{fmtDateTime(t.openTime)}</TableCell>
                         <TableCell className="num text-xs">{fmtDuration(t.holdingMinutes)}</TableCell>
-                        <TableCell className="max-w-[120px] truncate text-xs text-muted-foreground">
-                          {t.strategyName ?? '—'}
-                        </TableCell>
                         <TableCell className="num text-xs">
                           {t.rMultiple !== null ? (
                             <span className={rTone === 'pos' ? 'pnl-pos' : rTone === 'neg' ? 'pnl-neg' : 'pnl-flat'}>
@@ -403,19 +388,8 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
                             <span className="text-muted-foreground">—</span>
                           )}
                         </TableCell>
-                        <TableCell>
-                          {t.tags.length === 0 ? (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          ) : (
-                            <div className="flex items-center gap-1">
-                              {t.tags.slice(0, 2).map((tag) => (
-                                <TagBadge key={tag} tag={tag} />
-                              ))}
-                              {t.tags.length > 2 && (
-                                <span className="num text-[10px] text-muted-foreground">+{t.tags.length - 2}</span>
-                              )}
-                            </div>
-                          )}
+                        <TableCell className="num text-xs text-muted-foreground">
+                          <PnlValue value={t.commission} sign={false} className="text-xs" />
                         </TableCell>
                         <TableCell className="text-right">
                           <PnlValue value={t.netProfit} className="text-xs font-semibold" />
@@ -485,27 +459,6 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
               {/* Editors */}
               <div className="space-y-5">
                 <div>
-                  <EditorLabel hint={`${editTags.length} selected`}>Tags</EditorLabel>
-                  <div className="flex flex-wrap gap-1.5">
-                    {TRADE_TAGS.map((tag) => (
-                      <ToggleChip
-                        key={tag}
-                        label={tag}
-                        selected={editTags.includes(tag)}
-                        onClick={() => toggle(editTags, setEditTags, tag)}
-                      />
-                    ))}
-                  </div>
-                  {editTags.length > 0 && (
-                    <div className="mt-2 flex flex-wrap items-center gap-1">
-                      {editTags.map((tag) => (
-                        <TagBadge key={tag} tag={tag} onRemove={() => toggle(editTags, setEditTags, tag)} />
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div>
                   <EditorLabel hint={`${editMistakes.length} selected`}>Mistakes</EditorLabel>
                   <div className="flex flex-wrap gap-1.5">
                     {TRADE_MISTAKES.map((m) => (
@@ -526,37 +479,22 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
                   )}
                 </div>
 
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div>
-                    <EditorLabel>Emotion</EditorLabel>
-                    <Select
-                      value={editEmotion || '__none__'}
-                      onValueChange={(v) => setEditEmotion(v === '__none__' ? '' : v)}
-                    >
-                      <SelectTrigger className="h-8 w-full text-xs" aria-label="Emotion">
-                        <SelectValue placeholder="Select emotion" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">—</SelectItem>
-                        {TRADE_EMOTIONS.map((e) => (
-                          <SelectItem key={e} value={e}>{e}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <EditorLabel>Strategy</EditorLabel>
-                    <Select value={editStrategy || 'unassigned'} onValueChange={setEditStrategy}>
-                      <SelectTrigger className="h-8 w-full text-xs" aria-label="Strategy">
-                        <SelectValue placeholder="Select strategy" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {strategyOptions.map((o) => (
-                          <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <div>
+                  <EditorLabel>Emotion</EditorLabel>
+                  <Select
+                    value={editEmotion || '__none__'}
+                    onValueChange={(v) => setEditEmotion(v === '__none__' ? '' : v)}
+                  >
+                    <SelectTrigger className="h-8 w-full text-xs" aria-label="Emotion">
+                      <SelectValue placeholder="Select emotion" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">—</SelectItem>
+                      {TRADE_EMOTIONS.map((e) => (
+                        <SelectItem key={e} value={e}>{e}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div>

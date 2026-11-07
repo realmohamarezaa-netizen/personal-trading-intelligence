@@ -13,9 +13,7 @@ function parseJsonArray(s: string | null): string[] {
 }
 
 export async function loadEngineInput(): Promise<EngineInput | null> {
-  const account = await db.account.findFirst({
-    include: { strategies: { select: { id: true, name: true, description: true } } },
-  })
+  const account = await db.account.findFirst()
   if (!account) return null
 
   const [trades, cashflows, lastSync] = await Promise.all([
@@ -44,8 +42,6 @@ export async function loadEngineInput(): Promise<EngineInput | null> {
     rMultiple: t.rMultiple,
     holdingMinutes: t.holdingMinutes,
     status: t.status,
-    strategyId: t.strategyId,
-    tags: parseJsonArray(t.tags),
     mistakes: parseJsonArray(t.mistakes),
     emotion: t.emotion,
   }))
@@ -61,7 +57,6 @@ export async function loadEngineInput(): Promise<EngineInput | null> {
       leverage: account.leverage,
       initialBalance: account.initialBalance,
     },
-    strategies: account.strategies,
     trades: engineTrades,
     cashflows: cashflows.map((c) => ({ ts: c.ts, type: c.type as 'DEPOSIT' | 'WITHDRAWAL', amount: c.amount })),
     lastSyncAt: lastSync?.ts ?? null,

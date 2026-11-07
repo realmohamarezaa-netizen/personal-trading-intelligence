@@ -551,7 +551,7 @@ export function OverviewSection({
                   <div className="mt-1.5 flex items-end justify-between gap-2">
                     <div className="min-w-0 text-[11px] text-muted-foreground">
                       <div className="num">{fmtDuration(p.durationMinutes)}</div>
-                      <div className="truncate">{p.strategyName ?? 'Manual / no strategy'}</div>
+                      <div className="num truncate">commission {fmtMoney(p.commission, { sign: true })}</div>
                     </div>
                     <div className="shrink-0 text-right">
                       <PnlValue value={p.profit + p.swap} className="text-sm font-semibold" />

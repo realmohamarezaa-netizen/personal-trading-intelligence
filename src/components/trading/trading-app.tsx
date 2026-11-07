@@ -13,7 +13,6 @@ import {
   Layers,
   ShieldAlert,
   NotebookPen,
-  Target,
   BellRing,
   Settings,
   ShieldCheck,
@@ -34,7 +33,6 @@ import { TimeSection } from './sections/time-analytics'
 import { SymbolSection } from './sections/symbol-analytics'
 import { RiskSection } from './sections/risk-analytics'
 import { JournalSection } from './sections/journal'
-import { StrategiesSection } from './sections/strategies'
 import { InsightsSection } from './sections/insights'
 import { SettingsSection } from './sections/settings'
 
@@ -45,7 +43,6 @@ type SectionKey =
   | 'symbol'
   | 'risk'
   | 'journal'
-  | 'strategies'
   | 'insights'
   | 'settings'
 
@@ -56,7 +53,6 @@ const SECTIONS: { key: SectionKey; label: string; fa: string; icon: typeof Activ
   { key: 'symbol', label: 'Symbol Analytics', fa: 'تحلیل نمادها', icon: Layers },
   { key: 'risk', label: 'Risk Analytics', fa: 'تحلیل ریسک', icon: ShieldAlert },
   { key: 'journal', label: 'Trading Journal', fa: 'ژورنال معاملاتی', icon: NotebookPen },
-  { key: 'strategies', label: 'Strategies', fa: 'تحلیل استراتژی‌ها', icon: Target },
   { key: 'insights', label: 'Insights & Alerts', fa: 'هشدارها و کشف الگو', icon: BellRing },
   { key: 'settings', label: 'Settings', fa: 'تنظیمات', icon: Settings },
 ]
@@ -118,12 +114,10 @@ function AppInner() {
   const [section, setSection] = useState<SectionKey>('overview')
   const [range, setRange] = useState<RangeKey>('all')
   const [symbol, setSymbol] = useState('')
-  const [strategyId, setStrategyId] = useState('')
 
   const { data, isLoading, isError, error, refetch, isRefetching } = useQuery({
-    queryKey: ['analytics', range, symbol, strategyId],
-    queryFn: () =>
-      fetchAnalytics({ range, symbol: symbol || undefined, strategyId: strategyId || undefined }),
+    queryKey: ['analytics', range, symbol],
+    queryFn: () => fetchAnalytics({ range, symbol: symbol || undefined }),
   })
 
   const queryClient = useQueryClient()
@@ -348,9 +342,6 @@ function AppInner() {
                   )}
                   {section === 'risk' && <RiskSection data={data} />}
                   {section === 'journal' && <JournalSection data={data} />}
-                  {section === 'strategies' && (
-                    <StrategiesSection data={data} range={range} onRange={setRange} />
-                  )}
                   {section === 'insights' && <InsightsSection data={data} />}
                   {section === 'settings' && <SettingsSection />}
                 </motion.div>
@@ -369,7 +360,7 @@ function AppInner() {
                 </span>
               </div>
               <div className="num text-[11px] text-muted-foreground/70">
-                Personal Trading Intelligence v1.0 · 127.0.0.1
+                Personal Trading Intelligence v1.1 · 127.0.0.1
               </div>
             </div>
           </footer>

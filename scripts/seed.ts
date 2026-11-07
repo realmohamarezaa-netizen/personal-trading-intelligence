@@ -5,7 +5,7 @@ import { db } from '../src/lib/db'
 async function main() {
   console.log('⏳ Generating demo trading data...')
   const result = await reseedDemo()
-  console.log(`✅ Seeded: ${result.trades} closed trades, ${result.open} open positions, ${result.strategies} strategies, ${result.cashflows} cashflows`)
+  console.log(`✅ Seeded: ${result.trades} closed trades, ${result.open} open positions, ${result.cashflows} cashflows`)
   await db.$disconnect()
 }
 

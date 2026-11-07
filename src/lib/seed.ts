@@ -96,7 +96,6 @@ export interface ReseedResult {
   account: string
   trades: number
   open: number
-  strategies: number
   cashflows: number
   days: number
 }
@@ -109,7 +108,6 @@ export async function reseedDemo(): Promise<ReseedResult> {
   await db.equitySnapshot.deleteMany()
   await db.cashFlow.deleteMany()
   await db.trade.deleteMany()
-  await db.strategy.deleteMany()
   await db.account.deleteMany()
 
   const account = await db.account.create({
@@ -124,15 +122,6 @@ export async function reseedDemo(): Promise<ReseedResult> {
       initialBalance: 10000,
     },
   })
-
-  const strategies = await Promise.all(
-    STRATEGY_DEFS.map((s) =>
-      db.strategy.create({
-        data: { accountId: account.id, name: s.name, description: s.description },
-      })
-    )
-  )
-  const strategyIdByName = new Map(strategies.map((s) => [s.name, s.id]))
 
   // ── Generate history ──
   interface DraftTrade {
@@ -153,8 +142,6 @@ export async function reseedDemo(): Promise<ReseedResult> {
     pips: number | null
     rMultiple: number
     holdingMinutes: number
-    strategyId: string | null
-    tags: string[]
     mistakes: string[]
     emotion: string
     notes: string | null
@@ -232,29 +219,23 @@ export async function reseedDemo(): Promise<ReseedResult> {
         ? Math.round(((closePrice - openPrice) * meta.pipFactor * (direction === 'BUY' ? 1 : -1)) * 10) / 10
         : null
 
-      // Tags / mistakes / emotion
-      const tags: string[] = []
+      // Mistakes / emotion (journal-only fields — trade facts come from MT5)
       const mistakes: string[] = []
       let emotion: string
       if (isWin && netProfit > 0) {
-        if (chance(rng, 0.22)) tags.push(pick(rng, ['Perfect Setup', 'A+ Setup']))
-        if (chance(rng, 0.15)) tags.push(pick(rng, ['Partial Exit', 'Scaled In']))
         emotion = tilted ? pick(rng, ['Relieved' as string, 'Confident']) : pick(rng, ['Calm', 'Confident', 'Focused'])
       } else if (isBe) {
         emotion = pick(rng, ['Calm', 'Focused'])
       } else {
         if (tilted) {
-          tags.push(pick(rng, ['FOMO', 'Revenge Trade']))
           mistakes.push(pick(rng, ['Chased Price', 'Ignored Setup Rules', 'Oversized Position']))
           emotion = pick(rng, ['Impatient', 'Anxious', 'Tilted'])
         } else {
-          if (chance(rng, 0.3)) tags.push(pick(rng, ['Late Entry', 'Early Entry', 'News Trade']))
           if (chance(rng, 0.18)) mistakes.push(pick(rng, ['Moved SL to BE too early', 'Closed Too Early', 'Held Past SL mentally']))
           emotion = pick(rng, ['Calm', 'Focused', 'Anxious', 'Impatient'])
         }
       }
       if (isViolation) {
-        tags.push('Rule Violation')
         if (!mistakes.includes('Oversized Position')) mistakes.push('Oversized Position')
       }
 
@@ -278,8 +259,6 @@ export async function reseedDemo(): Promise<ReseedResult> {
         pips,
         rMultiple: round2(rMultiple),
         holdingMinutes,
-        strategyId: strategyIdByName.get(strat)!,
-        tags,
         mistakes,
         emotion,
         notes,
@@ -289,12 +268,6 @@ export async function reseedDemo(): Promise<ReseedResult> {
       if (netProfit < -0.0001) consecutiveLosses++
       else if (netProfit > 0.0001) consecutiveLosses = 0
     }
-  }
-
-  // A few unlabeled trades
-  for (let i = 0; i < 12; i++) {
-    const d = drafts[Math.floor(rng() * drafts.length)]
-    if (d) d.strategyId = null
   }
 
   // ── Cashflows (kept separate from trading profit) ──
@@ -307,12 +280,12 @@ export async function reseedDemo(): Promise<ReseedResult> {
   ]
 
   // ── Open positions (live-ish) ──
-  const openDefs: { symbol: string; direction: 'BUY' | 'SELL'; hoursAgo: number; profit: number; strategy: string }[] = [
-    { symbol: 'XAUUSD', direction: 'BUY', hoursAgo: 5, profit: 142.5, strategy: 'London Breakout' },
-    { symbol: 'EURUSD', direction: 'SELL', hoursAgo: 11, profit: -63.2, strategy: 'Trend Pullback' },
-    { symbol: 'GBPUSD', direction: 'BUY', hoursAgo: 26, profit: 88.4, strategy: 'NY Reversal' },
-    { symbol: 'US30', direction: 'BUY', hoursAgo: 33, profit: 210.0, strategy: 'Trend Pullback' },
-    { symbol: 'BTCUSD', direction: 'SELL', hoursAgo: 8, profit: -118.75, strategy: 'Asian Range Fade' },
+  const openDefs: { symbol: string; direction: 'BUY' | 'SELL'; hoursAgo: number; profit: number }[] = [
+    { symbol: 'XAUUSD', direction: 'BUY', hoursAgo: 5, profit: 142.5 },
+    { symbol: 'EURUSD', direction: 'SELL', hoursAgo: 11, profit: -63.2 },
+    { symbol: 'GBPUSD', direction: 'BUY', hoursAgo: 26, profit: 88.4 },
+    { symbol: 'US30', direction: 'BUY', hoursAgo: 33, profit: 210.0 },
+    { symbol: 'BTCUSD', direction: 'SELL', hoursAgo: 8, profit: -118.75 },
   ]
   const openTrades = openDefs.map((o, idx) => {
     const meta = SYMBOLS[o.symbol]
@@ -341,8 +314,6 @@ export async function reseedDemo(): Promise<ReseedResult> {
       rMultiple: null as number | null,
       holdingMinutes: null as number | null,
       status: 'OPEN',
-      strategyId: strategyIdByName.get(o.strategy) ?? null,
-      tags: idx === 4 ? JSON.stringify(['FOMO']) : JSON.stringify([]),
       mistakes: JSON.stringify([]),
       emotion: idx === 4 ? 'Impatient' : 'Calm',
       notes: null as string | null,
@@ -372,8 +343,6 @@ export async function reseedDemo(): Promise<ReseedResult> {
       rMultiple: d.rMultiple,
       holdingMinutes: d.holdingMinutes,
       status: 'CLOSED',
-      strategyId: d.strategyId,
-      tags: JSON.stringify(d.tags),
       mistakes: JSON.stringify(d.mistakes),
       emotion: d.emotion,
       notes: d.notes,
@@ -385,7 +354,6 @@ export async function reseedDemo(): Promise<ReseedResult> {
     account: account.name,
     trades: drafts.length,
     open: openTrades.length,
-    strategies: strategies.length,
     cashflows: cashflows.length,
     days: 186,
   }

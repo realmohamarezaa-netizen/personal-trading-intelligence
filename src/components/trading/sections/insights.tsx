@@ -83,29 +83,6 @@ function MistakeCostPanel({ data }: { data: AnalyticsData }) {
   )
 }
 
-function TagPerformancePanel({ data }: { data: AnalyticsData }) {
-  return (
-    <Panel title="Tag Performance" description="عملکرد برچسب‌ها">
-      {data.tagStats.length === 0 ? (
-        <p className="py-4 text-xs text-muted-foreground">No tags recorded yet</p>
-      ) : (
-        <div className="max-h-72 space-y-2 overflow-y-auto scroll-slim pr-1">
-          {data.tagStats.map((t) => (
-            <div key={t.tag} className="flex items-center justify-between gap-2 text-xs">
-              <TagBadge tag={t.tag} />
-              <span className="flex shrink-0 items-center gap-2.5">
-                <span className="num text-[10px] text-muted-foreground">{t.count}×</span>
-                <span className="num w-10 text-right text-muted-foreground">{t.winRate.toFixed(0)}%</span>
-                <PnlValue value={t.pnl} className="w-[76px] text-right text-xs font-semibold" />
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-    </Panel>
-  )
-}
-
 function PsychologyPanel({ data }: { data: AnalyticsData }) {
   const stats = [...data.emotionStats].sort((a, b) => b.pnl - a.pnl)
   const maxAbs = Math.max(...stats.map((e) => Math.abs(e.pnl)), 1)
@@ -161,24 +138,7 @@ function buildSummary(data: AnalyticsData) {
     })
   }
 
-  // 2) Best strategy
-  const bestStrategy = data.strategies.filter((s) => s.trades > 0).sort((a, b) => b.netPnl - a.netPnl)[0]
-  if (bestStrategy) {
-    lines.push({
-      key: 'strategy',
-      content: (
-        <>
-          Strongest strategy: <span className="font-semibold text-foreground">{bestStrategy.name}</span> —{' '}
-          <PnlValue value={bestStrategy.netPnl} className="font-semibold" /> over{' '}
-          <span className="num">{bestStrategy.trades}</span> trades (PF{' '}
-          <span className="num">{fmtPF(bestStrategy.profitFactor)}</span>, WR{' '}
-          <span className="num">{bestStrategy.winRate.toFixed(1)}%</span>).
-        </>
-      ),
-    })
-  }
-
-  // 3) Worst hour
+  // 2) Worst hour
   const worstHour = data.time.worstHour
   if (worstHour && worstHour.trades > 0) {
     lines.push({
@@ -193,7 +153,7 @@ function buildSummary(data: AnalyticsData) {
     })
   }
 
-  // 4) Largest drawdown
+  // 3) Largest drawdown
   if (data.risk.maxDdPct > 0) {
     lines.push({
       key: 'dd',
@@ -231,9 +191,8 @@ export function InsightsSection({ data }: { data: AnalyticsData }) {
       </div>
 
       {/* Behavior analysis */}
-      <div className="mb-4 grid gap-4 lg:grid-cols-3">
+      <div className="mb-4 grid gap-4 lg:grid-cols-2">
         <MistakeCostPanel data={data} />
-        <TagPerformancePanel data={data} />
         <PsychologyPanel data={data} />
       </div>
 
