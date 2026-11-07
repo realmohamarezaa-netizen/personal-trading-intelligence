@@ -97,8 +97,8 @@ function InstallerDownloadPanel() {
     >
       {isLoading ? (
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <Skeleton className="h-24 flex-1 rounded-xl bg-card/60" />
-          <Skeleton className="h-24 flex-1 rounded-xl bg-card/60" />
+          <Skeleton className="skeleton-shimmer h-24 flex-1 rounded-xl bg-card/60" />
+          <Skeleton className="skeleton-shimmer h-24 flex-1 rounded-xl bg-card/60" />
         </div>
       ) : (
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">

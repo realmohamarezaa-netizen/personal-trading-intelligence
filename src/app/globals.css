@@ -53,6 +53,9 @@
   --neg: oklch(0.71 0.19 14);
   --warn: oklch(0.83 0.16 84);
   --info: oklch(0.75 0.13 232);
+  /* The app is dark-only — tells the browser to render native widgets
+     (and the fallback scrollbar) in dark mode as well */
+  color-scheme: dark;
 }
 
 .dark {
@@ -112,23 +115,99 @@
   .glow-line {
     box-shadow: 0 0 0 1px oklch(1 0 0 / 6%), 0 8px 30px oklch(0 0 0 / 35%);
   }
-  .scroll-slim {
-    scrollbar-width: thin;
-    scrollbar-color: oklch(0.38 0.02 255) transparent;
+  /* Skeleton shimmer — a soft light sweep over placeholder blocks */
+  .skeleton-shimmer {
+    position: relative;
+    overflow: hidden;
   }
+  .skeleton-shimmer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(
+      90deg,
+      transparent,
+      oklch(1 0 0 / 6%) 42%,
+      oklch(1 0 0 / 10%) 50%,
+      oklch(1 0 0 / 6%) 58%,
+      transparent
+    );
+    animation: pti-shimmer 1.8s ease-in-out infinite;
+  }
+
+  /* Slim variant for inner lists — same visual language, tighter geometry.
+     NOTE: no standard scrollbar-width/color here — in Chromium 121+ those
+     would disable the ::-webkit-scrollbar styling below. */
   .scroll-slim::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+    width: 8px;
+    height: 8px;
   }
   .scroll-slim::-webkit-scrollbar-track {
     background: transparent;
   }
   .scroll-slim::-webkit-scrollbar-thumb {
-    background: oklch(0.38 0.02 255);
+    border: 2.5px solid transparent;
     border-radius: 999px;
+    background-color: oklch(0.42 0.028 255 / 80%);
+    background-clip: padding-box;
   }
   .scroll-slim::-webkit-scrollbar-thumb:hover {
-    background: oklch(0.48 0.03 255);
+    background-color: transparent;
+    background-image: linear-gradient(180deg, oklch(0.80 0.13 165), oklch(0.64 0.11 195));
+    background-clip: padding-box;
+    box-shadow: 0 0 8px oklch(0.77 0.15 162 / 30%);
+  }
+}
+
+/* ─── Custom scrollbar — premium dark glass, matches the app UI ─────────────
+   Global: page + every scroll container gets the same look. Neutral slate
+   thumb at rest → emerald→teal gradient + soft glow on hover (brand accent). */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: oklch(1 0 0 / 3%);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-color: oklch(0.42 0.028 255 / 88%);
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: transparent;
+  background-image: linear-gradient(180deg, oklch(0.80 0.13 165), oklch(0.64 0.11 195));
+  background-clip: padding-box;
+  box-shadow: 0 0 10px oklch(0.77 0.15 162 / 35%);
+}
+::-webkit-scrollbar-thumb:active {
+  background-image: linear-gradient(180deg, oklch(0.85 0.14 165), oklch(0.70 0.12 195));
+  background-clip: padding-box;
+  box-shadow: 0 0 12px oklch(0.77 0.15 162 / 45%);
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Firefox fallback — Firefox has no ::-webkit-scrollbar support. Guarded
+   with @supports so Chromium keeps the full custom styling above (standard
+   scrollbar-* properties would disable the webkit pseudo-element styles). */
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: oklch(0.42 0.028 255) oklch(1 0 0 / 3%);
+  }
+}
+
+@keyframes pti-shimmer {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
   }
 }
 

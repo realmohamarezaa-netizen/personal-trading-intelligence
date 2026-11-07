@@ -3,7 +3,7 @@
 // ─── Trading Journal — filterable trade log with inline trade-file editors ───
 
 import { useMemo, useState, type ReactNode } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronRight, Download, Loader2, RefreshCw, Search } from 'lucide-react'
 import type { AnalyticsData, JournalTrade, RangeKey } from '@/lib/types'
 import { TRADE_EMOTIONS, TRADE_MISTAKES } from '@/lib/types'
@@ -136,9 +136,12 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
     [range, symbol, result, status, q]
   )
 
-  const { data: journal, isLoading, isError, error, refetch, isRefetching } = useQuery({
+  // keepPreviousData: filter changes keep the current table visible (dimmed)
+  // instead of collapsing it into the loading skeleton every time.
+  const { data: journal, isLoading, isError, error, refetch, isRefetching, isPlaceholderData } = useQuery({
     queryKey: ['journal', filters],
     queryFn: () => fetchJournal(filters),
+    placeholderData: keepPreviousData,
   })
 
   const trades = journal?.trades ?? []
@@ -299,16 +302,16 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
               <TableBody>
                 {Array.from({ length: 8 }).map((_, r) => (
                   <TableRow key={r}>
-                    <TableCell><Skeleton className="h-3.5 w-10" /></TableCell>
-                    <TableCell><Skeleton className="h-3.5 w-20" /></TableCell>
-                    <TableCell><Skeleton className="h-3.5 w-12" /></TableCell>
-                    <TableCell><Skeleton className="h-3.5 w-32" /></TableCell>
-                    <TableCell><Skeleton className="h-3.5 w-14" /></TableCell>
-                    <TableCell><Skeleton className="h-3.5 w-24" /></TableCell>
-                    <TableCell><Skeleton className="h-3.5 w-10" /></TableCell>
-                    <TableCell><Skeleton className="h-3.5 w-24" /></TableCell>
-                    <TableCell><Skeleton className="h-3.5 w-16" /></TableCell>
-                    <TableCell><Skeleton className="h-3.5 w-4" /></TableCell>
+                    <TableCell><Skeleton className="skeleton-shimmer h-3.5 w-10" /></TableCell>
+                    <TableCell><Skeleton className="skeleton-shimmer h-3.5 w-20" /></TableCell>
+                    <TableCell><Skeleton className="skeleton-shimmer h-3.5 w-12" /></TableCell>
+                    <TableCell><Skeleton className="skeleton-shimmer h-3.5 w-32" /></TableCell>
+                    <TableCell><Skeleton className="skeleton-shimmer h-3.5 w-14" /></TableCell>
+                    <TableCell><Skeleton className="skeleton-shimmer h-3.5 w-24" /></TableCell>
+                    <TableCell><Skeleton className="skeleton-shimmer h-3.5 w-10" /></TableCell>
+                    <TableCell><Skeleton className="skeleton-shimmer h-3.5 w-24" /></TableCell>
+                    <TableCell><Skeleton className="skeleton-shimmer h-3.5 w-16" /></TableCell>
+                    <TableCell><Skeleton className="skeleton-shimmer h-3.5 w-4" /></TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -330,7 +333,12 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
         </Panel>
       ) : (
         <Panel title="Trades" description="Click a row to open the trade file">
-          <div className="max-h-[560px] overflow-y-auto scroll-slim">
+          <div
+            className={cn(
+              'max-h-[560px] overflow-y-auto scroll-slim transition-opacity duration-300',
+              isPlaceholderData && 'pointer-events-none opacity-55'
+            )
+          }>
             <Table>
               <TableHeader className="sticky top-0 z-10 bg-card">
                 <TableRow>

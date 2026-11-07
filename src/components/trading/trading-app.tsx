@@ -3,7 +3,7 @@
 // ─── Application Shell — sidebar, topbar, footer, section routing ────────────
 
 import { useEffect, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Activity,
@@ -27,6 +27,7 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/hooks/use-toast'
 import { Providers } from './providers'
+import { DashboardSkeleton } from './shared/skeletons'
 import { OverviewSection } from './sections/overview'
 import { PerformanceSection } from './sections/performance'
 import { TimeSection } from './sections/time-analytics'
@@ -131,9 +132,13 @@ function AppInner() {
   const [range, setRange] = useState<RangeKey>('all')
   const [symbol, setSymbol] = useState('')
 
-  const { data, isLoading, isError, error, refetch, isRefetching } = useQuery({
+  // keepPreviousData: while a new range/symbol is fetched the previous
+  // dataset stays on screen (dimmed below) instead of the whole page
+  // collapsing into a spinner — switching feels instant, data just updates.
+  const { data, isLoading, isError, error, refetch, isRefetching, isPlaceholderData } = useQuery({
     queryKey: ['analytics', range, symbol],
     queryFn: () => fetchAnalytics({ range, symbol: symbol || undefined }),
+    placeholderData: keepPreviousData,
   })
 
   const queryClient = useQueryClient()
@@ -310,12 +315,8 @@ function AppInner() {
           {/* Content */}
           <main className="mx-auto w-full max-w-[1500px] flex-1 p-4 md:p-6">
             {isLoading ? (
-              <div className="flex min-h-[50vh] items-center justify-center">
-                <div className="flex flex-col items-center gap-3 text-muted-foreground">
-                  <RefreshCw className="h-6 w-6 animate-spin" />
-                  <span className="text-sm">Loading analytics…</span>
-                </div>
-              </div>
+              // First load (no previous data to keep): structural skeleton
+              <DashboardSkeleton />
             ) : isError || !data ? (
               <div className="flex min-h-[50vh] items-center justify-center">
                 <div className="flex max-w-md flex-col items-center gap-3 rounded-xl border border-[var(--neg)]/25 bg-[var(--neg)]/5 p-6 text-center">
@@ -328,6 +329,12 @@ function AppInner() {
                 </div>
               </div>
             ) : (
+              <div
+                className={cn(
+                  'transition-opacity duration-300',
+                  isPlaceholderData && 'pointer-events-none opacity-55'
+                )}
+              >
               <AnimatePresence mode="wait">
                 <motion.div
                   key={section}
@@ -351,6 +358,7 @@ function AppInner() {
                   {section === 'settings' && <SettingsSection />}
                 </motion.div>
               </AnimatePresence>
+              </div>
             )}
           </main>
 
