@@ -59,7 +59,7 @@ export async function POST(_req: NextRequest) {
     if (isRunning(g.__mt5SyncPid)) {
       return NextResponse.json({
         ok: true,
-        pid: g.__mt5SyncPid,
+        pid: g.__mt5SyncPid ?? undefined,
         alreadyRunning: true,
         message: 'Connector is already running and syncing in the background.',
       } satisfies LaunchResult)

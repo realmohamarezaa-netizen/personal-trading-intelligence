@@ -9,15 +9,17 @@
 #   - python-embed.zip                         (Python 3.12 embeddable win64)
 #   - /home/z/py-wheels/*.whl                  (MetaTrader5 + requests for win)
 #
-# Usage: bash desktop-build/build-installer.sh <version>
-# Prereq: run `bun run build` first (output: "standalone" mode is expected —
-# .next/standalone plus .next/static and public/ are assembled below).
+# Usage: NEXT_DIST_DIR=.next-desktop bash desktop-build/build-installer.sh <version>
+# Prereq: run `NEXT_DIST_DIR=.next-desktop bun run build` first (output: "standalone"
+# mode is expected — .next-desktop/standalone plus .next/static and public/ are
+# assembled below). Using a separate dist dir keeps the dev server's .next intact.
 
 set -euo pipefail
 exec 2>&1
 
-VERSION="${1:-1.1.0}"
+VERSION="${1:-1.2.0}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+NEXT_DIST="$ROOT/${NEXT_DIST_DIR:-.next}"
 STAGE=/home/z/pti-stage
 ELECTRON_ZIP=/home/z/electron-win32-x64.zip
 PY_EMBED_ZIP="$ROOT/python-embed.zip"
@@ -30,12 +32,12 @@ rm -rf "$STAGE"
 mkdir -p "$STAGE/app/resources/app"
 
 echo "=== [2/8] Next.js standalone -> app/resources/app/server ==="
-cp -r "$ROOT/.next/standalone/." "$STAGE/app/resources/app/server/"
+cp -r "$NEXT_DIST/standalone/." "$STAGE/app/resources/app/server/"
 
 # standalone output does NOT include static assets — copy them manually
 echo "=== [2b/8] Static assets (.next/static, public/) ==="
 mkdir -p "$STAGE/app/resources/app/server/.next"
-cp -r "$ROOT/.next/static" "$STAGE/app/resources/app/server/.next/static"
+cp -r "$NEXT_DIST/static" "$STAGE/app/resources/app/server/.next/static"
 cp -r "$ROOT/public" "$STAGE/app/resources/app/server/public"
 # keep the installer lean: never nest the setup exe / big archives inside itself
 rm -f "$STAGE/app/resources/app/server/public"/PTI-Setup-*.exe \

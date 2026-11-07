@@ -76,3 +76,6 @@ test
 # ─── Vercel ───────────────────────────────────────────────────
 .vercel
 Caddyfile
+
+# ─── Isolated desktop build output ──────────────
+.next-desktop/

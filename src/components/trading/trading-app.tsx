@@ -13,7 +13,6 @@ import {
   Layers,
   ShieldAlert,
   NotebookPen,
-  BellRing,
   Settings,
   ShieldCheck,
   RefreshCw,
@@ -23,6 +22,7 @@ import {
 } from 'lucide-react'
 import type { AnalyticsData, RangeKey } from '@/lib/types'
 import { fetchAnalytics, launchMt5Connector } from '@/lib/api-client'
+import { APP_VERSION } from '@/lib/app-info'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/hooks/use-toast'
@@ -33,7 +33,6 @@ import { TimeSection } from './sections/time-analytics'
 import { SymbolSection } from './sections/symbol-analytics'
 import { RiskSection } from './sections/risk-analytics'
 import { JournalSection } from './sections/journal'
-import { InsightsSection } from './sections/insights'
 import { SettingsSection } from './sections/settings'
 
 type SectionKey =
@@ -43,7 +42,6 @@ type SectionKey =
   | 'symbol'
   | 'risk'
   | 'journal'
-  | 'insights'
   | 'settings'
 
 const SECTIONS: { key: SectionKey; label: string; fa: string; icon: typeof Activity }[] = [
@@ -53,7 +51,6 @@ const SECTIONS: { key: SectionKey; label: string; fa: string; icon: typeof Activ
   { key: 'symbol', label: 'Symbol Analytics', fa: 'تحلیل نمادها', icon: Layers },
   { key: 'risk', label: 'Risk Analytics', fa: 'تحلیل ریسک', icon: ShieldAlert },
   { key: 'journal', label: 'Trading Journal', fa: 'ژورنال معاملاتی', icon: NotebookPen },
-  { key: 'insights', label: 'Insights & Alerts', fa: 'هشدارها و کشف الگو', icon: BellRing },
   { key: 'settings', label: 'Settings', fa: 'تنظیمات', icon: Settings },
 ]
 
@@ -152,9 +149,6 @@ function AppInner() {
     },
   })
 
-  const warningCount =
-    data?.alerts.filter((a) => a.severity === 'critical' || a.severity === 'warning').length ?? 0
-
   const activeMeta = SECTIONS.find((s) => s.key === section)!
 
   return (
@@ -206,11 +200,6 @@ function AppInner() {
                     <span className="block text-[13px] font-medium leading-tight">{s.label}</span>
                     <span className="block text-[10px] text-muted-foreground/70">{s.fa}</span>
                   </span>
-                  {s.key === 'insights' && warningCount > 0 && (
-                    <span className="num inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--warn)]/15 px-1 text-[10px] font-bold text-[var(--warn)]">
-                      {warningCount}
-                    </span>
-                  )}
                 </button>
               )
             })}
@@ -342,7 +331,6 @@ function AppInner() {
                   )}
                   {section === 'risk' && <RiskSection data={data} />}
                   {section === 'journal' && <JournalSection data={data} />}
-                  {section === 'insights' && <InsightsSection data={data} />}
                   {section === 'settings' && <SettingsSection />}
                 </motion.div>
               </AnimatePresence>
@@ -360,7 +348,7 @@ function AppInner() {
                 </span>
               </div>
               <div className="num text-[11px] text-muted-foreground/70">
-                Personal Trading Intelligence v1.1.0 · 127.0.0.1
+                Personal Trading Intelligence v{APP_VERSION} · 127.0.0.1
               </div>
             </div>
           </footer>

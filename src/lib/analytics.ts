@@ -3,7 +3,6 @@
 // All time bucketing uses Asia/Tehran (UTC+3:30, no DST since 2022).
 
 import type {
-  AlertItem,
   AnalyticsData,
   CalendarDay,
   DailyPnl,
@@ -591,24 +590,6 @@ export function computeAnalytics(
       durationMinutes: Math.max(0, Math.round((now.getTime() - t.openTime.getTime()) / 60000)),
     }))
 
-  // ── Alerts (always recent / account-level) ──
-  const last14 = allClosed.filter((t) => now.getTime() - t.closeTime!.getTime() <= 14 * 864e5)
-  const last7 = allClosed.filter((t) => now.getTime() - t.closeTime!.getTime() <= 7 * 864e5)
-  const alerts = buildAlerts({
-    input,
-    allClosed,
-    last14,
-    last7,
-    dailyPnl: dailyPnl,
-    worstHourFull: pickWorstHour(allClosed),
-    sellStat: directions.find((d) => d.direction === 'SELL')!,
-    currentDdPct,
-    curL: streak.curL,
-    curW: streak.curW,
-    lastSyncAt: input.lastSyncAt,
-    now,
-  })
-
   // ── Overview ──
   const totalReturnPct = input.account.initialBalance
     ? (totalNetProfitAll / input.account.initialBalance) * 100
@@ -649,7 +630,6 @@ export function computeAnalytics(
     mistakeStats,
     emotionStats,
     openPositions,
-    alerts,
     meta: {
       generatedAt: now.toISOString(),
       lastSyncAt: input.lastSyncAt ? input.lastSyncAt.toISOString() : null,
@@ -732,154 +712,4 @@ function buildTagStats(closed: EngineTrade[], pick: (t: EngineTrade) => string[]
   return [...map.entries()]
     .map(([tag, e]) => ({ tag, count: e.count, pnl: round2(e.pnl), winRate: round1((e.wins / e.count) * 100) }))
     .sort((a, b) => b.count - a.count)
-}
-
-function pickWorstHour(all: EngineTrade[]): HourStat | null {
-  const agg = new Map<number, { pnl: number; trades: number; wins: number }>()
-  for (const t of all) {
-    const h = tehranHour(t.openTime)
-    const e = agg.get(h) ?? { pnl: 0, trades: 0, wins: 0 }
-    e.pnl += t.netProfit
-    e.trades++
-    if (t.netProfit > 0) e.wins++
-    agg.set(h, e)
-  }
-  const candidates = [...agg.entries()]
-    .filter(([, e]) => e.trades >= 15)
-    .map(([hour, e]) => ({ hour, pnl: round2(e.pnl), trades: e.trades, winRate: round1((e.wins / e.trades) * 100) }))
-  if (!candidates.length) return null
-  return candidates.reduce((a, b) => (b.pnl < a.pnl ? b : a))
-}
-
-function buildAlerts(ctx: {
-  input: EngineInput
-  allClosed: EngineTrade[]
-  last14: EngineTrade[]
-  last7: EngineTrade[]
-  dailyPnl: DailyPnl[]
-  worstHourFull: HourStat | null
-  sellStat: DirectionStat
-  currentDdPct: number
-  curL: number
-  curW: number
-  lastSyncAt: Date | null
-  now: Date
-}): AlertItem[] {
-  const alerts: AlertItem[] = []
-  const { input, allClosed, last14, last7, sellStat, currentDdPct, curL, curW, lastSyncAt, now } = ctx
-  let seq = 0
-  const add = (a: Omit<AlertItem, 'id'>) => alerts.push({ id: `alert-${++seq}`, ...a })
-
-  if (input.demoMode) {
-    add({
-      severity: 'info',
-      title: 'Demo data mode',
-      message: 'Dashboard is running on generated sample data. Run the MT5 connector on your Windows machine to sync your real account.',
-    })
-  }
-
-  if (curL >= 3) {
-    add({
-      severity: curL >= 5 ? 'critical' : 'warning',
-      title: `${curL} consecutive losing trades`,
-      message: 'You are in a losing streak. Consider reducing size or pausing until your edge re-confirms.',
-      metric: `${curL} losses in a row`,
-    })
-  }
-  if (curW >= 5) {
-    add({
-      severity: 'success',
-      title: `${curW} consecutive wins`,
-      message: 'Strong current momentum. Stay disciplined — do not oversize while confident.',
-      metric: `${curW} wins in a row`,
-    })
-  }
-
-  if (currentDdPct >= 4) {
-    add({
-      severity: currentDdPct >= 8 ? 'critical' : 'warning',
-      title: 'Equity drawdown threshold breached',
-      message: `Account is ${currentDdPct.toFixed(1)}% below its equity peak. Review open risk exposure.`,
-      metric: `-${currentDdPct.toFixed(1)}% DD`,
-    })
-  }
-
-  const revenge = last14.filter((t) => t.mistakes.includes('Chased Price') || t.mistakes.includes('Held Past SL mentally'))
-  if (revenge.length >= 2) {
-    const cost = sum(revenge.map((t) => t.netProfit))
-    add({
-      severity: 'warning',
-      title: 'Revenge / FOMO pattern detected',
-      message: `${revenge.length} emotionally-driven trades in the last 14 days with a combined P/L of ${cost >= 0 ? '+' : ''}${cost.toFixed(0)} USD.`,
-      metric: `${revenge.length} trades`,
-    })
-  }
-
-  const violations = last14.filter((t) => t.mistakes.includes('Ignored Setup Rules'))
-  if (violations.length >= 2) {
-    add({
-      severity: 'warning',
-      title: 'Rule violations increasing',
-      message: `${violations.length} rule violations recorded in the last 14 days. Your discipline score is dropping.`,
-      metric: `${violations.length} violations`,
-    })
-  }
-
-  if (ctx.worstHourFull && ctx.worstHourFull.pnl < 0) {
-    add({
-      severity: 'info',
-      title: 'Weak trading hour identified',
-      message: `Your trades opened around ${String(ctx.worstHourFull.hour).padStart(2, '0')}:00 Tehran time lost ${Math.abs(ctx.worstHourFull.pnl).toFixed(0)} USD over ${ctx.worstHourFull.trades} trades — statistically your worst hour.`,
-      metric: `${String(ctx.worstHourFull.hour).padStart(2, '0')}:00 · ${ctx.worstHourFull.pnl.toFixed(0)} USD`,
-    })
-  }
-
-  if (sellStat.trades >= 20 && sellStat.profitFactor < 0.9) {
-    add({
-      severity: 'info',
-      title: 'Sell-side underperformance',
-      message: `Short trades show a profit factor of ${sellStat.profitFactor.toFixed(2)} across ${sellStat.trades} trades. Consider reviewing your short setups.`,
-      metric: `PF ${sellStat.profitFactor.toFixed(2)}`,
-    })
-  }
-
-  // Overtrading check
-  const last7Trades = last7.length
-  const priorAvgDaily = (() => {
-    const prior = allClosed.filter(
-      (t) => now.getTime() - t.closeTime!.getTime() > 7 * 864e5 && now.getTime() - t.closeTime!.getTime() <= 37 * 864e5
-    )
-    return prior.length / 30
-  })()
-  if (priorAvgDaily > 0.5 && last7Trades / 7 > priorAvgDaily * 1.6 && last7Trades >= 15) {
-    add({
-      severity: 'warning',
-      title: 'Possible overtrading',
-      message: `Your last-7-day trade frequency is ${((last7Trades / 7 / priorAvgDaily) * 100 - 100).toFixed(0)}% above your 30-day baseline.`,
-      metric: `${last7Trades} trades / 7d`,
-    })
-  }
-
-  const bigLossDay = ctx.dailyPnl.find(
-    (d) => d.pnl < -0.02 * input.account.initialBalance
-  )
-  if (bigLossDay) {
-    add({
-      severity: 'info',
-      title: 'Large daily loss on record',
-      message: `On ${bigLossDay.date} the account lost ${Math.abs(bigLossDay.pnl).toFixed(0)} USD (${bigLossDay.trades} trades) — more than 2% of initial balance in a single day.`,
-      metric: `${bigLossDay.pnl.toFixed(0)} USD`,
-    })
-  }
-
-  if (lastSyncAt && now.getTime() - lastSyncAt.getTime() > 30 * 60000) {
-    add({
-      severity: 'warning',
-      title: 'MT5 sync is stale',
-      message: `Last successful sync was ${Math.round((now.getTime() - lastSyncAt.getTime()) / 60000)} minutes ago. Check the connector on your machine.`,
-    })
-  }
-
-  const order = { critical: 0, warning: 1, info: 2, success: 3 } as const
-  return alerts.sort((a, b) => order[a.severity] - order[b.severity]).slice(0, 10)
 }

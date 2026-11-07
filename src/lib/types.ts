@@ -2,7 +2,6 @@
 
 export type RangeKey = '7d' | '30d' | '90d' | '180d' | 'all'
 export type Direction = 'BUY' | 'SELL'
-export type AlertSeverity = 'critical' | 'warning' | 'info' | 'success'
 
 export const RANGE_LABELS: Record<RangeKey, string> = {
   '7d': '7D',
@@ -217,14 +216,6 @@ export interface RiskAnalysis {
   openExposure: { symbol: string; volume: number }[]
 }
 
-export interface AlertItem {
-  id: string
-  severity: AlertSeverity
-  title: string
-  message: string
-  metric?: string
-}
-
 export interface AnalyticsData {
   account: AccountInfo
   range: { key: RangeKey; from: string | null; to: string }
@@ -241,7 +232,6 @@ export interface AnalyticsData {
   mistakeStats: MistakeStatLite[]
   emotionStats: EmotionStat[]
   openPositions: OpenPosition[]
-  alerts: AlertItem[]
   meta: {
     generatedAt: string
     lastSyncAt: string | null
@@ -319,7 +309,7 @@ export interface DownloadInfo {
   fallbackUrl: string
 }
 
-// Taxonomy used across journal / insights
+// Taxonomy used across the journal
 export const TRADE_MISTAKES = [
   'No Stop Loss',
   'Oversized Position',
