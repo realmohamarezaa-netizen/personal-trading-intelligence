@@ -36,6 +36,19 @@ export function fmtPF(pf: number | null | undefined): string {
   return pf.toFixed(2)
 }
 
+export function fmtBytes(bytes: number | null | undefined, decimals = 1): string {
+  if (bytes === null || bytes === undefined || !isFinite(bytes) || bytes < 0) return '—'
+  if (bytes < 1024) return `${Math.round(bytes)} B`
+  const units = ['KB', 'MB', 'GB', 'TB']
+  let value = bytes / 1024
+  let i = 0
+  while (value >= 1024 && i < units.length - 1) {
+    value /= 1024
+    i++
+  }
+  return `${value.toFixed(decimals)} ${units[i]}`
+}
+
 export function fmtDuration(minutes: number | null | undefined): string {
   if (minutes === null || minutes === undefined || !isFinite(minutes)) return '—'
   if (minutes < 60) return `${Math.round(minutes)}m`

@@ -308,6 +308,17 @@ export interface SettingsResponse {
   demoMode: boolean
 }
 
+// Windows installer download (Settings → Download section)
+export interface DownloadInfo {
+  available: boolean
+  fileName: string
+  version: string
+  sizeBytes: number
+  sha256: string | null
+  modifiedAt: string | null
+  fallbackUrl: string
+}
+
 // Taxonomy used across journal / insights
 export const TRADE_MISTAKES = [
   'No Stop Loss',

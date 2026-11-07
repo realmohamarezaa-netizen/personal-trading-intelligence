@@ -48,7 +48,7 @@ Built with Next.js 16 · TypeScript · Prisma · SQLite · Electron
 | 🛡 **Risk Analytics — تحلیل ریسک** | توزیع R-Multiple، نسبت ریسک به ریوارد، تحلیل حجم لات، سری‌های برد/باخت |
 | 📓 **Trading Journal — ژورنال معاملاتی** | تاریخچهٔ کامل متاتریدر: کمیسیون، سوآپ، سود خالص + یادداشت، اشتباهات و وضعیت روانی برای هر معامله؛ خروجی CSV |
 | 🔔 **Insights & Alerts — هشدارها** | کشف خودکار الگوها: وین‌استریک‌ها، اوورتریدینگ، ریسک غیرعادی و… |
-| ⚙️ **Settings — تنظیمات** | اتصال MT5، بازهٔ همگام‌سازی، تولید دادهٔ نمونه، مدیریت پایگاه داده |
+| ⚙️ **Settings — تنظیمات** | اتصال MT5، بازهٔ همگام‌سازی، تولید دادهٔ نمونه، مدیریت پایگاه داده، **دانلود فایل نصبی ویندوز** |
 
 <div align="center">
 <table>
@@ -88,6 +88,17 @@ Built with Next.js 16 · TypeScript · Prisma · SQLite · Electron
 - اسکریپت‌های آماده‌سازی: `desktop-build/` (ساخت آیکون‌ها، بستهٔ اپ، تنظیمات NSIS)
 
 </details>
+
+### ⬇ دانلود نصاب از داخل خود برنامه
+
+صفحهٔ **Settings** داشبورد یک بخش «دانلود نسخهٔ ویندوز» دارد:
+
+- فایل `PTI-Setup-x.y.z.exe` از مسیر `GET /api/download` به‌صورت جریانی دانلود می‌شود
+  (پشتیبانی از **Range** برای ادامهٔ دانلود ناتمام روی فایل‌های حجیم)
+- نسخه، حجم دقیق، تاریخ ساخت و **SHA-256** فایل (با دکمهٔ کپی) نمایش داده می‌شود
+- اگر فایل نصاب روی آن نصب موجود نباشد، به‌صورت خودکار به
+  [GitHub Releases](https://github.com/realmohamarezaa-netizen/personal-trading-intelligence/releases/latest) هدایت می‌شوید
+- برای ساخت مجدد نصاب با آخرین کد: `bun run build` و سپس `bash desktop-build/build-installer.sh <version>`
 
 ---
 

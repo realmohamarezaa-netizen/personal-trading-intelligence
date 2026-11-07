@@ -4,10 +4,22 @@
 
 import type { ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Loader2, PlugZap, RefreshCw, ShieldCheck, Square } from 'lucide-react'
+import {
+  AlertTriangle,
+  CopyCheck,
+  Download,
+  ExternalLink,
+  Loader2,
+  MonitorDown,
+  PlugZap,
+  RefreshCw,
+  ShieldCheck,
+  Square,
+} from 'lucide-react'
 import type { SettingsResponse } from '@/lib/types'
-import { fetchSettings, launchMt5Connector, reseedDemoData, stopMt5Connector } from '@/lib/api-client'
-import { fmtDateTime, fmtMoney } from '@/lib/format'
+import { fetchDownloadInfo, fetchSettings, launchMt5Connector, reseedDemoData, stopMt5Connector } from '@/lib/api-client'
+import { fmtBytes, fmtDateTime, fmtMoney } from '@/lib/format'
+import { APP_VERSION, INSTALLER_DOWNLOAD_URL } from '@/lib/app-info'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -48,6 +60,124 @@ function KV({ label, children }: { label: string; children: ReactNode }) {
 function Code({ children }: { children: ReactNode }) {
   return (
     <code className="rounded bg-muted/60 px-1.5 py-0.5 text-[11px] text-foreground/90">{children}</code>
+  )
+}
+
+// ─── Windows installer download ───────────────────────────────────────────────
+
+function InstallerDownloadPanel() {
+  const { toast } = useToast()
+  const { data, isLoading } = useQuery({
+    queryKey: ['download-info'],
+    queryFn: fetchDownloadInfo,
+    staleTime: 60_000,
+  })
+
+  const copyChecksum = async () => {
+    if (!data?.sha256) return
+    try {
+      await navigator.clipboard.writeText(data.sha256)
+      toast({ title: 'Checksum copied', description: 'SHA-256 به کلیپ‌بورد کپی شد' })
+    } catch {
+      toast({ title: 'Copy failed', variant: 'destructive' })
+    }
+  }
+
+  return (
+    <Panel
+      title="دانلود نسخهٔ ویندوز — Windows Installer"
+      description="نصب کن، متاتریدر را باز کن، متصل شو — بدون VS Code و بدون پایتون"
+    >
+      {isLoading ? (
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <Skeleton className="h-24 flex-1 rounded-xl bg-card/60" />
+          <Skeleton className="h-24 flex-1 rounded-xl bg-card/60" />
+        </div>
+      ) : (
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
+          {/* Download action */}
+          <div className="flex flex-col justify-center gap-3 rounded-xl border border-[var(--pos)]/25 bg-[var(--pos)]/8 p-4">
+            {data?.available ? (
+              <a
+                href={INSTALLER_DOWNLOAD_URL}
+                download={data.fileName}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[var(--pos)] px-5 text-sm font-bold text-emerald-950 shadow-sm transition hover:bg-[var(--pos)]/85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--pos)]"
+              >
+                <Download className="h-5 w-5" aria-hidden />
+                Download Installer (64-bit)
+              </a>
+            ) : (
+              <div className="flex flex-col gap-2">
+                <Button
+                  variant="outline"
+                  className="h-11 gap-2 opacity-60"
+                  disabled
+                  aria-label="Installer file not bundled in this build"
+                >
+                  <Download className="h-5 w-5" aria-hidden />
+                  Installer not bundled here
+                </Button>
+                <a
+                  href={data?.fallbackUrl ?? '#'}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 text-xs font-semibold text-foreground transition hover:bg-muted"
+                >
+                  <ExternalLink className="h-4 w-4" aria-hidden />
+                  دانلود از GitHub Releases
+                </a>
+              </div>
+            )}
+            <div className="flex items-center gap-2 text-[11px] leading-relaxed text-muted-foreground">
+              <MonitorDown className="h-4 w-4 shrink-0 text-[var(--pos)]" aria-hidden />
+              <span className="num">
+                {data?.available
+                  ? `${data.fileName} · ${fmtBytes(data.sizeBytes)} · ویندوز ۱۰/۱۱ ۶۴بیتی`
+                  : 'این فایل فقط در نسخهٔ ساخته‌شدهٔ ویندوز همراه برنامه است'}
+              </span>
+            </div>
+          </div>
+
+          {/* Meta info */}
+          <div className="min-w-0">
+            <KV label="Version">v{data?.version ?? APP_VERSION}</KV>
+            <KV label="Size">
+              <span className="num">{data?.available ? fmtBytes(data.sizeBytes) : '—'}</span>
+            </KV>
+            <KV label="Requirement">Windows 10 / 11 — 64-bit · MetaTrader 5</KV>
+            <KV label="Built">
+              <span className="num">{fmtDateTime(data?.modifiedAt)}</span>
+            </KV>
+            <div className="flex items-center justify-between gap-3 border-b border-border/40 py-1.5 text-xs last:border-0">
+              <span className="shrink-0 text-muted-foreground">SHA-256</span>
+              <span className="flex min-w-0 items-center gap-1.5">
+                <span className="num truncate text-[10px] text-foreground/70" title={data?.sha256 ?? undefined}>
+                  {data?.sha256 ? `${data.sha256.slice(0, 24)}…${data.sha256.slice(-8)}` : '—'}
+                </span>
+                {data?.sha256 ? (
+                  <button
+                    type="button"
+                    onClick={copyChecksum}
+                    className="shrink-0 rounded p-1 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                    aria-label="Copy SHA-256 checksum"
+                  >
+                    <CopyCheck className="h-3.5 w-3.5" aria-hidden />
+                  </button>
+                ) : null}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="mt-3 flex items-start gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
+        <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[var(--pos)]" aria-hidden />
+        <span>
+          بعد از نصب: متاتریدر ۵ را باز و وارد حسابتان شوید → دکمهٔ «Algo Trading» را روشن کنید → در داشبورد
+          «Connect MT5» را بزنید. همین صفحه (Settings) همیشه آخرین نسخهٔ نصاب را برای دانلود ارائه می‌دهد.
+        </span>
+      </div>
+    </Panel>
   )
 }
 
@@ -111,6 +241,10 @@ export function SettingsSection() {
   return (
     <div>
       <SectionHeader title="Settings" subtitle="تنظیمات حساب، اتصال MT5 و مدیریت داده" />
+
+      <div className="mb-4">
+        <InstallerDownloadPanel />
+      </div>
 
       {isLoading ? (
         <div className="grid gap-4 lg:grid-cols-2">

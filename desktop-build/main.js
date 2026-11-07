@@ -33,6 +33,9 @@ function log(line) {
 
 function startServer() {
   serverProc = spawn(process.execPath, [path.join(SERVER_DIR, 'server.js')], {
+    // standalone server expects its own directory as cwd so that
+    // public/ (incl. the installer download endpoint) resolves correctly
+    cwd: SERVER_DIR,
     env: {
       ...process.env,
       ELECTRON_RUN_AS_NODE: '1',

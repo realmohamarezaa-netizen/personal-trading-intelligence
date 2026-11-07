@@ -10,6 +10,8 @@
 #   - /home/z/py-wheels/*.whl                  (MetaTrader5 + requests for win)
 #
 # Usage: bash desktop-build/build-installer.sh <version>
+# Prereq: run `bun run build` first (output: "standalone" mode is expected —
+# .next/standalone plus .next/static and public/ are assembled below).
 
 set -euo pipefail
 exec 2>&1
@@ -29,6 +31,15 @@ mkdir -p "$STAGE/app/resources/app"
 
 echo "=== [2/8] Next.js standalone -> app/resources/app/server ==="
 cp -r "$ROOT/.next/standalone/." "$STAGE/app/resources/app/server/"
+
+# standalone output does NOT include static assets — copy them manually
+echo "=== [2b/8] Static assets (.next/static, public/) ==="
+mkdir -p "$STAGE/app/resources/app/server/.next"
+cp -r "$ROOT/.next/static" "$STAGE/app/resources/app/server/.next/static"
+cp -r "$ROOT/public" "$STAGE/app/resources/app/server/public"
+# keep the installer lean: never nest the setup exe / big archives inside itself
+rm -f "$STAGE/app/resources/app/server/public"/PTI-Setup-*.exe \
+      "$STAGE/app/resources/app/server/public"/*.zip
 
 echo "=== [3/8] Electron shell ==="
 cd "$STAGE"

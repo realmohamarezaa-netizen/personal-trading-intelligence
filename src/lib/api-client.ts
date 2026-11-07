@@ -2,6 +2,7 @@
 
 import type {
   AnalyticsData,
+  DownloadInfo,
   JournalResponse,
   RangeKey,
   SettingsResponse,
@@ -70,6 +71,11 @@ export async function updateTrade(
 export async function fetchSettings(): Promise<SettingsResponse> {
   const res = await fetch('/api/settings', { cache: 'no-store' })
   return handle<SettingsResponse>(res)
+}
+
+export async function fetchDownloadInfo(): Promise<DownloadInfo> {
+  const res = await fetch('/api/download?info=1', { cache: 'no-store' })
+  return handle<DownloadInfo>(res)
 }
 
 export async function reseedDemoData(): Promise<void> {

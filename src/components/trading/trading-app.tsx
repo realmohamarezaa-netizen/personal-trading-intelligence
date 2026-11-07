@@ -360,7 +360,7 @@ function AppInner() {
                 </span>
               </div>
               <div className="num text-[11px] text-muted-foreground/70">
-                Personal Trading Intelligence v1.1 · 127.0.0.1
+                Personal Trading Intelligence v1.1.0 · 127.0.0.1
               </div>
             </div>
           </footer>
