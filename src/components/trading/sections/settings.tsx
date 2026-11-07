@@ -75,6 +75,10 @@ function InstallerDownloadPanel() {
     staleTime: 60_000,
   })
 
+  // The dashboard serves the ZIP package; an installed copy serves the setup
+  // .exe it published into its own public/ folder at install time.
+  const isZip = (data?.fileName ?? INSTALLER_FILE_NAME).toLowerCase().endsWith('.zip')
+
   const copyChecksum = async () => {
     if (!data?.sha256) return
     try {
@@ -108,7 +112,7 @@ function InstallerDownloadPanel() {
                 className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[var(--pos)] px-5 text-sm font-bold text-emerald-950 shadow-sm transition hover:bg-[var(--pos)]/85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--pos)]"
               >
                 <Download className="h-5 w-5" aria-hidden />
-                Download Installer (ZIP · 64-bit)
+                Download Installer ({isZip ? 'ZIP' : 'EXE'} · 64-bit)
               </a>
             ) : (
               <div className="flex flex-col gap-2">
@@ -185,9 +189,18 @@ function InstallerDownloadPanel() {
         <div className="flex items-start gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
           <FolderArchive className="mt-0.5 h-4 w-4 shrink-0 text-[var(--warn)]" aria-hidden />
           <span>
-            فایل دانلودشده یک بستهٔ <Code>ZIP</Code> است ({data?.fileName ?? INSTALLER_FILE_NAME}). ابتدا آن را
-            Extract کنید و سپس <Code>{INSTALLER_EXE_FILE_NAME}</Code> را اجرا کنید. ویندوز هنگام استخراج، سلامت فایل را
-            با CRC خودش کنترل می‌کند.
+            {isZip ? (
+              <>
+                فایل دانلودشده یک بستهٔ <Code>ZIP</Code> است ({data?.fileName ?? INSTALLER_FILE_NAME}). ابتدا آن را
+                Extract کنید و سپس <Code>{INSTALLER_EXE_FILE_NAME}</Code> را اجرا کنید. ویندوز هنگام استخراج، سلامت فایل را
+                با CRC خودش کنترل می‌کند.
+              </>
+            ) : (
+              <>
+                این همان فایل نصبی است که این برنامه با آن نصب شده ({data?.fileName ?? INSTALLER_EXE_FILE_NAME}) — برای
+                نصب روی سیستم دیگر کافی است آن را مستقیم اجرا کنید؛ نیازی به Extract ندارد.
+              </>
+            )}
           </span>
         </div>
         <div className="flex items-start gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">

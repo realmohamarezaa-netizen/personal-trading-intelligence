@@ -35,6 +35,15 @@ Section "Install"
   File /r "app/*"
   File "README-fa.txt"
 
+  ; Publish this very setup executable into the app's download folder so the
+  ; dashboard's Settings keeps offering the direct download after install
+  ; (the packaged payload strips installer files to avoid self-nesting —
+  ;  the running installer is the authoritative copy, hash-consistent with
+  ;  the .exe inside the distributed ZIP).
+  Delete "$INSTDIR\resources\app\server\public\PTI-Setup-*.exe"
+  Delete "$INSTDIR\resources\app\server\public\PTI-Setup-*.zip"
+  CopyFiles "$EXEPATH" "$INSTDIR\resources\app\server\public\PTI-Setup-${APPVER}.exe"
+
   ; Shortcuts
   CreateDirectory "$SMPROGRAMS\${APPNAME}"
   CreateShortCut "$SMPROGRAMS\${APPNAME}\${APPNAME}.lnk" "$INSTDIR\TradingIntelligence.exe" "" "$INSTDIR\resources\app\icon.ico"

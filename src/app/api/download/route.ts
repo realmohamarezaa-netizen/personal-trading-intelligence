@@ -7,12 +7,32 @@ import { createHash } from 'node:crypto'
 import path from 'node:path'
 import { stat } from 'node:fs/promises'
 import { Readable } from 'node:stream'
-import { APP_VERSION, GITHUB_RELEASES_URL, INSTALLER_FILE_NAME } from '@/lib/app-info'
+import { APP_VERSION, GITHUB_RELEASES_URL, INSTALLER_EXE_FILE_NAME, INSTALLER_FILE_NAME } from '@/lib/app-info'
 
 export const dynamic = 'force-dynamic'
 
-function installerPath(): string {
-  return path.join(process.cwd(), 'public', INSTALLER_FILE_NAME)
+/**
+ * The dashboard (dev/preview) ships the ZIP package; an installed copy instead
+ * self-publishes its own setup .exe into public/ at install time (the NSIS
+ * script CopyFiles $EXEPATH there). Serve whichever exists — ZIP preferred.
+ */
+function installerCandidates(): string[] {
+  return [
+    path.join(process.cwd(), 'public', INSTALLER_FILE_NAME),
+    path.join(process.cwd(), 'public', INSTALLER_EXE_FILE_NAME),
+  ]
+}
+
+async function findInstaller(): Promise<{ fileName: string; stats: Stats } | null> {
+  for (const filePath of installerCandidates()) {
+    try {
+      const stats = await stat(filePath)
+      if (stats.isFile()) return { fileName: path.basename(filePath), stats }
+    } catch {
+      // try the next candidate
+    }
+  }
+  return null
 }
 
 function contentTypeFor(fileName: string): string {
@@ -55,37 +75,36 @@ function notAvailable() {
   }
 }
 
-function binaryHeaders(stats: Stats) {
+function binaryHeaders(stats: Stats, fileName: string) {
   return {
-    'Content-Type': contentTypeFor(INSTALLER_FILE_NAME),
+    'Content-Type': contentTypeFor(fileName),
     'Content-Length': String(stats.size),
     'Accept-Ranges': 'bytes',
-    'Content-Disposition': `attachment; filename="${INSTALLER_FILE_NAME}"`,
+    'Content-Disposition': `attachment; filename="${fileName}"`,
     'Cache-Control': 'no-store',
   }
 }
 
 export async function GET(req: Request) {
-  const filePath = installerPath()
   const url = new URL(req.url)
   const wantsInfo = url.searchParams.get('info') != null
 
-  let stats: Stats
-  try {
-    stats = await stat(filePath)
-  } catch {
+  const found = await findInstaller()
+  if (!found) {
     if (wantsInfo) return Response.json(notAvailable())
     return Response.json(
       { error: 'فایل نصبی روی این نصب یافت نشد — از GitHub Releases دانلود کنید' },
       { status: 404 },
     )
   }
+  const { fileName, stats } = found
+  const filePath = path.join(process.cwd(), 'public', fileName)
 
   if (wantsInfo) {
     const sha256 = await sha256OfFile(filePath, stats)
     return Response.json({
       available: true,
-      fileName: INSTALLER_FILE_NAME,
+      fileName,
       version: APP_VERSION,
       sizeBytes: stats.size,
       sha256,
@@ -121,7 +140,7 @@ export async function GET(req: Request) {
       return new Response(Readable.toWeb(partial) as ReadableStream, {
         status: 206,
         headers: {
-          ...binaryHeaders(stats),
+          ...binaryHeaders(stats, fileName),
           'Content-Length': String(end - start + 1),
           'Content-Range': `bytes ${start}-${end}/${size}`,
         },
@@ -131,6 +150,6 @@ export async function GET(req: Request) {
 
   const full = createReadStream(filePath)
   return new Response(Readable.toWeb(full) as ReadableStream, {
-    headers: binaryHeaders(stats),
+    headers: binaryHeaders(stats, fileName),
   })
 }
