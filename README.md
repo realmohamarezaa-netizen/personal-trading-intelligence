@@ -92,8 +92,9 @@ Built with Next.js 16 · TypeScript · Prisma · SQLite · Electron
 
 صفحهٔ **Settings** داشبورد یک بخش «دانلود نسخهٔ ویندوز» دارد:
 
-- فایل `PTI-Setup-x.y.z.exe` از مسیر `GET /api/download` به‌صورت جریانی دانلود می‌شود
-  (پشتیبانی از **Range** برای ادامهٔ دانلود ناتمام روی فایل‌های حجیم)
+- بستهٔ دانلودی `PTI-Setup-x.y.z.zip` (شامل `PTI-Setup-x.y.z.exe`) از مسیر `GET /api/download`
+  به‌صورت جریانی دانلود می‌شود (پشتیبانی از **Range** برای ادامهٔ دانلود ناتمام روی فایل‌های حجیم).
+  قالب ZIP باعث می‌شود فایل همیشه سالم و با پسوند درست ذخیره شود و ویندوز هنگام استخراج CRC آن را کنترل کند
 - نسخه، حجم دقیق، تاریخ ساخت و **SHA-256** فایل (با دکمهٔ کپی) نمایش داده می‌شود
 - اگر فایل نصاب روی آن نصب موجود نباشد، به‌صورت خودکار به
   [GitHub Releases](https://github.com/realmohamarezaa-netizen/personal-trading-intelligence/releases/latest) هدایت می‌شوید

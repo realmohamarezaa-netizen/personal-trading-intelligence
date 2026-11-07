@@ -15,6 +15,11 @@ function installerPath(): string {
   return path.join(process.cwd(), 'public', INSTALLER_FILE_NAME)
 }
 
+function contentTypeFor(fileName: string): string {
+  if (fileName.toLowerCase().endsWith('.zip')) return 'application/zip'
+  return 'application/vnd.microsoft.portable-executable'
+}
+
 // Hashing a ~300 MB file takes a moment — compute once, then reuse while the
 // file is unchanged (keyed on path + mtime + size so a rebuilt installer
 // invalidates the cache automatically instead of serving a stale hash).
@@ -52,7 +57,7 @@ function notAvailable() {
 
 function binaryHeaders(stats: Stats) {
   return {
-    'Content-Type': 'application/vnd.microsoft.portable-executable',
+    'Content-Type': contentTypeFor(INSTALLER_FILE_NAME),
     'Content-Length': String(stats.size),
     'Accept-Ranges': 'bytes',
     'Content-Disposition': `attachment; filename="${INSTALLER_FILE_NAME}"`,

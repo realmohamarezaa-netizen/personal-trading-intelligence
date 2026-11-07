@@ -10,6 +10,7 @@ import {
   Download,
   ExternalLink,
   FileCheck2,
+  FolderArchive,
   Loader2,
   MonitorDown,
   PlugZap,
@@ -100,14 +101,14 @@ function InstallerDownloadPanel() {
           <div className="flex flex-col justify-center gap-3 rounded-xl border border-[var(--pos)]/25 bg-[var(--pos)]/8 p-4">
             {data?.available ? (
               <a
-                // href ends with the real .exe filename so the saved file keeps its
+                // href ends with the real file name so the saved file keeps its
                 // extension even when a proxy strips Content-Disposition headers
                 href={`/${data.fileName}`}
                 download={data.fileName}
                 className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[var(--pos)] px-5 text-sm font-bold text-emerald-950 shadow-sm transition hover:bg-[var(--pos)]/85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--pos)]"
               >
                 <Download className="h-5 w-5" aria-hidden />
-                Download Installer (64-bit)
+                Download Installer (ZIP · 64-bit)
               </a>
             ) : (
               <div className="flex flex-col gap-2">
@@ -182,11 +183,18 @@ function InstallerDownloadPanel() {
           </span>
         </div>
         <div className="flex items-start gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
+          <FolderArchive className="mt-0.5 h-4 w-4 shrink-0 text-[var(--warn)]" aria-hidden />
+          <span>
+            فایل دانلودشده یک بستهٔ <Code>ZIP</Code> است ({data?.fileName ?? 'PTI-Setup-1.2.0.zip'}). ابتدا آن را
+            Extract کنید و سپس <Code>PTI-Setup-1.2.0.exe</Code> را اجرا کنید. ویندوز هنگام استخراج، سلامت فایل را
+            با CRC خودش کنترل می‌کند.
+          </span>
+        </div>
+        <div className="flex items-start gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
           <FileCheck2 className="mt-0.5 h-4 w-4 shrink-0 text-[var(--warn)]" aria-hidden />
           <span>
-            فایل دانلودشده باید <Code>{data?.fileName ?? 'PTI-Setup-1.1.0.exe'}</Code> باشد (پسوند{' '}
-            <span className="font-mono">.exe</span>). برای اطمینان از سالم بودن، در PowerShell اجرا کنید:{' '}
-            <Code>certutil -hashfile {data?.fileName ?? 'PTI-Setup-1.1.0.exe'} SHA256</Code> — خروجی باید
+            برای اطمینان از سالم بودن بسته، در PowerShell اجرا کنید:{' '}
+            <Code>certutil -hashfile {data?.fileName ?? 'PTI-Setup-1.2.0.zip'} SHA256</Code> — خروجی باید
             همین مقدار بالا باشد.
           </span>
         </div>

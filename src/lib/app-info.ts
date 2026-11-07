@@ -3,8 +3,16 @@
 export const APP_NAME = 'Personal Trading Intelligence'
 export const APP_VERSION = '1.2.0'
 
-/** Windows installer file name shipped in /public */
-export const INSTALLER_FILE_NAME = `PTI-Setup-${APP_VERSION}.exe`
+/** The .exe inside the downloadable package */
+export const INSTALLER_EXE_FILE_NAME = `PTI-Setup-${APP_VERSION}.exe`
+
+/**
+ * What the dashboard actually serves: the installer wrapped in a ZIP.
+ * A .zip survives proxies/AV scanners that mangle raw .exe downloads,
+ * always keeps its extension, and carries its own CRC integrity check —
+ * the SHA-256 shown in Settings refers to this ZIP file.
+ */
+export const INSTALLER_FILE_NAME = `PTI-Setup-${APP_VERSION}.zip`
 
 /** Local dashboard endpoint that streams the installer (resume-friendly) */
 export const INSTALLER_DOWNLOAD_URL = '/api/download'
