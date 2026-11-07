@@ -13,8 +13,11 @@ export const dynamic = 'force-dynamic'
 // When those are absent (web / sandbox / plain dev), we answer with a clear
 // NOT_BUNDLED error so the UI can fall back to the manual connector guide.
 //
-// First launch also removes the generated demo dataset, so the dashboard
-// switches cleanly from DEMO DATA to the user's real account.
+// First launch removes the generated demo dataset and creates a placeholder
+// "mt5" account shell, so the dashboard switches cleanly from DEMO DATA to
+// the user's real account. The shell also guarantees SyncLog rows always
+// have a valid account (FK) and stops the demo auto-seed from re-generating
+// sample data while the first real import is still running.
 //
 // Read-only: the connector can never place, modify or close any order.
 
@@ -66,7 +69,9 @@ export async function POST(_req: NextRequest) {
     }
 
     // First real connection: drop the generated demo dataset so the dashboard
-    // switches from DEMO DATA to the user's real account without leftovers.
+    // switches from DEMO DATA to the user's real account without leftovers,
+    // then make sure an account row always exists (shell is updated by the
+    // first real sync with the actual MT5 account info).
     let wipedDemo = false
     const demoAccount = await db.account.findUnique({ where: { id: 'demo' } })
     if (demoAccount) {
@@ -74,21 +79,60 @@ export async function POST(_req: NextRequest) {
       wipedDemo = true
     }
 
+    let shell = await db.account.findFirst()
+    if (!shell) {
+      shell = await db.account.create({
+        data: {
+          id: 'mt5',
+          name: 'MT5 Account',
+          broker: 'Connecting…',
+          server: 'Connecting…',
+          initialBalance: 0, // reconstructed from the first real sync (see /api/mt5/sync)
+        },
+      })
+    }
+
     const logDir = process.env.PTI_LOG_DIR ?? path.join(process.cwd(), 'logs')
     fs.mkdirSync(logDir, { recursive: true })
     const out = fs.openSync(path.join(logDir, 'mt5-sync.log'), 'a')
 
-    const child = spawn(
-      pythonExe,
-      [scriptPath, '--api', `http://127.0.0.1:${port}`, '--days', '365', '--interval', '45'],
-      { cwd: path.dirname(scriptPath), stdio: ['ignore', out, out] },
-    )
+    let child
+    try {
+      child = spawn(
+        pythonExe,
+        [scriptPath, '--api', `http://127.0.0.1:${port}`, '--days', '365', '--interval', '45'],
+        { cwd: path.dirname(scriptPath), stdio: ['ignore', out, out] },
+      )
+    } catch (spawnErr) {
+      console.error('[api/mt5/launch] spawn failed', spawnErr)
+      return NextResponse.json({ error: 'LAUNCH_FAILED' }, { status: 500 })
+    }
+
+    // A spawn error (e.g. ENOENT) is emitted async — without this handler it
+    // would crash the whole Next.js server process.
+    child.on('error', (err) => {
+      console.error('[api/mt5/launch] connector process error', err)
+      if (g.__mt5SyncPid === child.pid) g.__mt5SyncPid = null
+      db.syncLog
+        .create({
+          data: {
+            accountId: shell!.id,
+            source: 'DESKTOP_LAUNCH',
+            status: 'ERROR',
+            message: `Connector failed to start: ${err.message}`,
+            tradesInserted: 0,
+            tradesUpdated: 0,
+          },
+        })
+        .catch(() => {})
+    })
+
     child.unref()
     g.__mt5SyncPid = child.pid ?? null
 
     await db.syncLog.create({
       data: {
-        accountId: 'mt5',
+        accountId: shell.id,
         source: 'DESKTOP_LAUNCH',
         status: 'OK',
         message: `Bundled connector started (pid ${child.pid ?? '?'}) — syncing every 45s`,

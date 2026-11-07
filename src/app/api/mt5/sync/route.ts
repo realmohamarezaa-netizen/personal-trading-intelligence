@@ -52,6 +52,9 @@ export async function POST(req: NextRequest) {
 
     let account = await db.account.findFirst()
     if (!account) {
+      // initialBalance starts at 0 and is reconstructed at the end of this
+      // sync from the snapshot (balance − cashflows − closed P/L) — that is
+      // exact for any history depth, unlike assuming the first sync's balance.
       account = await db.account.create({
         data: {
           id: 'mt5',
@@ -61,7 +64,7 @@ export async function POST(req: NextRequest) {
           mt5Login: body.account?.login != null ? String(body.account.login) : null,
           currency: body.account?.currency ?? 'USD',
           leverage: body.account?.leverage ?? 100,
-          initialBalance: body.snapshot?.balance ?? 0,
+          initialBalance: 0,
         },
       })
     } else {
@@ -140,6 +143,35 @@ export async function POST(req: NextRequest) {
         })
         cashflowsAdded++
       }
+    }
+
+    // First real sync on a fresh (shell) account: reconstruct the true
+    // initial balance so that the analytics identity
+    //   balance = initial + deposits − withdrawals + closed P/L
+    // closes exactly on the reported snapshot balance. Works for any
+    // history depth: pre-window flows simply fold into "initial".
+    if (account.initialBalance === 0 && body.snapshot?.balance != null) {
+      const [closedAgg, depAgg, wdAgg] = await Promise.all([
+        db.trade.aggregate({
+          where: { accountId: account.id, status: 'CLOSED' },
+          _sum: { netProfit: true },
+        }),
+        db.cashFlow.aggregate({
+          where: { accountId: account.id, type: 'DEPOSIT' },
+          _sum: { amount: true },
+        }),
+        db.cashFlow.aggregate({
+          where: { accountId: account.id, type: 'WITHDRAWAL' },
+          _sum: { amount: true }, // stored positive; the analytics identity subtracts by type
+        }),
+      ])
+      const netCash = (depAgg._sum.amount ?? 0) - (wdAgg._sum.amount ?? 0)
+      const initial =
+        body.snapshot.balance - netCash - (closedAgg._sum.netProfit ?? 0)
+      await db.account.update({
+        where: { id: account.id },
+        data: { initialBalance: initial },
+      })
     }
 
     await db.syncLog.create({
