@@ -9,6 +9,9 @@ Unicode true
 
 !define APPNAME "Personal Trading Intelligence"
 !define APPVER  "1.2.0"
+; Shortcut/registry icon file — version-unique name so Windows icon cache
+; cannot serve a stale icon after an in-place upgrade (build seds the name).
+!define ICONFILE "icon-1.2.0.ico"
 !define UNINSTKEY "TradingIntelligence"
 !define DATADIR "$APPDATA\TradingIntelligence"
 
@@ -53,16 +56,16 @@ Section "Install"
 
   ; Shortcuts
   CreateDirectory "$SMPROGRAMS\${APPNAME}"
-  CreateShortCut "$SMPROGRAMS\${APPNAME}\${APPNAME}.lnk" "$INSTDIR\TradingIntelligence.exe" "" "$INSTDIR\resources\app\icon.ico"
+  CreateShortCut "$SMPROGRAMS\${APPNAME}\${APPNAME}.lnk" "$INSTDIR\TradingIntelligence.exe" "" "$INSTDIR\resources\app\${ICONFILE}"
   CreateShortCut "$SMPROGRAMS\${APPNAME}\Uninstall ${APPNAME}.lnk" "$INSTDIR\Uninstall.exe"
-  CreateShortCut "$DESKTOP\${APPNAME}.lnk" "$INSTDIR\TradingIntelligence.exe" "" "$INSTDIR\resources\app\icon.ico"
+  CreateShortCut "$DESKTOP\${APPNAME}.lnk" "$INSTDIR\TradingIntelligence.exe" "" "$INSTDIR\resources\app\${ICONFILE}"
 
   ; Uninstaller + Add/Remove Programs registration (per-user)
   WriteUninstaller "$INSTDIR\Uninstall.exe"
   WriteRegStr   HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${UNINSTKEY}" "DisplayName"     "${APPNAME}"
   WriteRegStr   HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${UNINSTKEY}" "DisplayVersion" "${APPVER}"
   WriteRegStr   HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${UNINSTKEY}" "Publisher"      "Personal Trading Intelligence"
-  WriteRegStr   HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${UNINSTKEY}" "DisplayIcon"    "$INSTDIR\resources\app\icon.ico"
+  WriteRegStr   HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${UNINSTKEY}" "DisplayIcon"    "$INSTDIR\resources\app\${ICONFILE}"
   WriteRegStr   HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${UNINSTKEY}" "InstallLocation" "$INSTDIR"
   WriteRegStr   HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${UNINSTKEY}" "UninstallString" '"$INSTDIR\Uninstall.exe"'
   WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${UNINSTKEY}" "NoModify" 1

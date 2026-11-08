@@ -104,6 +104,15 @@ echo "=== payload contains NO database ✓ ==="
 echo "=== [5/8] Icons ==="
 node "$ROOT/desktop-build/make-icons.mjs" "$ROOT/desktop-build/icon.svg" "$APP"
 
+# Version-unique copy for shortcuts/registry — busts the Windows icon cache
+# after in-place upgrades (same shortcut path used to show the stale icon)
+cp "$APP/icon.ico" "$APP/icon-$VERSION.ico"
+
+# Replace the Electron default atom icon embedded in TradingIntelligence.exe
+# with the PTI icon (Explorer / file-properties surface)
+echo "=== [5b/8] Patch TradingIntelligence.exe embedded icon ==="
+node "$ROOT/desktop-build/patch-exe-icon.mjs" "$STAGE/app/TradingIntelligence.exe" "$APP/icon.ico"
+
 echo "=== [6/8] Bundled Python 3.12 (win64) + MT5 wheels ==="
 mkdir -p "$APP/python"
 unzip -q "$PY_EMBED_ZIP" -d "$APP/python"
@@ -124,6 +133,7 @@ cp "$ROOT/desktop-build/README-fa.txt" "$STAGE/README-fa.txt"
 cd "$STAGE"
 cp "$ROOT/desktop-build/installer.nsi" "$STAGE/installer.nsi"
 sed -i "s/!define APPVER  \".*\"/!define APPVER  \"$VERSION\"/" "$STAGE/installer.nsi"
+sed -i "s/!define ICONFILE \".*\"/!define ICONFILE \"icon-$VERSION.ico\"/" "$STAGE/installer.nsi"
 
 echo "=== [8/8] Compile installer ==="
 "$MAKENSIS" "$STAGE/installer.nsi" | tail -5
