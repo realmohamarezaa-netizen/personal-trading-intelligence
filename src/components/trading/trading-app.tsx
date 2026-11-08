@@ -19,7 +19,6 @@ import {
   AlertTriangle,
   Loader2,
   PlugZap,
-  Target,
 } from 'lucide-react'
 import type { AnalyticsData, RangeKey } from '@/lib/types'
 import { fetchAnalytics, fetchSettings, launchMt5Connector } from '@/lib/api-client'
@@ -37,7 +36,6 @@ import { TimeSection } from './sections/time-analytics'
 import { SymbolSection } from './sections/symbol-analytics'
 import { RiskSection } from './sections/risk-analytics'
 import { JournalSection } from './sections/journal'
-import { StrategiesSection } from './sections/strategies'
 import { SettingsSection } from './sections/settings'
 
 type SectionKey =
@@ -47,7 +45,6 @@ type SectionKey =
   | 'symbol'
   | 'risk'
   | 'journal'
-  | 'strategies'
   | 'settings'
 
 const SECTIONS: { key: SectionKey; label: string; fa: string; icon: typeof Activity }[] = [
@@ -57,7 +54,6 @@ const SECTIONS: { key: SectionKey; label: string; fa: string; icon: typeof Activ
   { key: 'symbol', label: 'Symbol Analytics', fa: 'تحلیل نمادها', icon: Layers },
   { key: 'risk', label: 'Risk Analytics', fa: 'تحلیل ریسک', icon: ShieldAlert },
   { key: 'journal', label: 'Trading Journal', fa: 'ژورنال معاملاتی', icon: NotebookPen },
-  { key: 'strategies', label: 'Strategies', fa: 'استراتژی‌ها', icon: Target },
   { key: 'settings', label: 'Settings', fa: 'تنظیمات', icon: Settings },
 ]
 
@@ -405,7 +401,6 @@ function AppInner() {
                   )}
                   {section === 'risk' && <RiskSection data={data} />}
                   {section === 'journal' && <JournalSection data={data} />}
-                  {section === 'strategies' && <StrategiesSection accountId={accountId} />}
                   {section === 'settings' && <SettingsSection />}
                 </motion.div>
               </AnimatePresence>

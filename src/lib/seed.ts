@@ -108,7 +108,6 @@ export async function reseedDemo(): Promise<ReseedResult> {
   await db.equitySnapshot.deleteMany()
   await db.cashFlow.deleteMany()
   await db.trade.deleteMany()
-  await db.strategy.deleteMany()
   await db.account.deleteMany()
 
   const account = await db.account.create({
@@ -126,24 +125,9 @@ export async function reseedDemo(): Promise<ReseedResult> {
     },
   })
 
-  // ── Strategy library (persisted so the Strategies section is usable) ──
-  const strategyColors = ['#34d399', '#f59e0b', '#f472b6', '#a78bfa']
-  const strategyRows: { id: string }[] = []
-  for (let i = 0; i < STRATEGY_DEFS.length; i++) {
-    const def = STRATEGY_DEFS[i]
-    strategyRows.push(
-      await db.strategy.create({
-        data: {
-          name: def.name,
-          description: def.description,
-          color: strategyColors[i % strategyColors.length],
-          magicNumbers: String(101 + i),
-        },
-      })
-    )
-  }
-
   // ── Generate history ──
+  // STRATEGY_DEFS now only shapes the generated behaviour (win rate, hours,
+  // holding time, symbol pool, magic number) — no Strategy rows are created.
   interface DraftTrade {
     positionId: number
     positionTicket: number
@@ -165,7 +149,6 @@ export async function reseedDemo(): Promise<ReseedResult> {
     pips: number | null
     rMultiple: number
     holdingMinutes: number
-    strategyId: string
     magicNumber: number
     mistakes: string[]
     emotion: string
@@ -191,7 +174,6 @@ export async function reseedDemo(): Promise<ReseedResult> {
       const strat = pickWeighted(rng, STRATEGY_DEFS.map((s) => [s.name, Math.round(s.weight * 100)] as [string, number]))
       const stratIdx = STRATEGY_DEFS.findIndex((s) => s.name === strat)
       const def = STRATEGY_DEFS[stratIdx]
-      const strategyId = strategyRows[stratIdx].id
       const magicNumber = 101 + stratIdx
       const symbol = pickWeighted(rng, SYMBOL_POOL[strat])
       const meta = SYMBOLS[symbol]
@@ -291,7 +273,6 @@ export async function reseedDemo(): Promise<ReseedResult> {
         pips,
         rMultiple: round2(rMultiple),
         holdingMinutes,
-        strategyId,
         magicNumber,
         mistakes,
         emotion,
@@ -350,7 +331,6 @@ export async function reseedDemo(): Promise<ReseedResult> {
       rMultiple: null as number | null,
       holdingMinutes: null as number | null,
       status: 'OPEN',
-      strategyId: null as string | null,
       magicNumber: null as number | null,
       mistakes: JSON.stringify([]),
       emotion: idx === 4 ? 'Impatient' : 'Calm',
@@ -384,7 +364,6 @@ export async function reseedDemo(): Promise<ReseedResult> {
       rMultiple: d.rMultiple,
       holdingMinutes: d.holdingMinutes,
       status: 'CLOSED',
-      strategyId: d.strategyId,
       magicNumber: BigInt(d.magicNumber),
       mistakes: JSON.stringify(d.mistakes),
       emotion: d.emotion,

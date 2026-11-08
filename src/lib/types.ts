@@ -1,15 +1,26 @@
 // ─── Shared domain types for Personal Trading Intelligence ───────────────────
 
-export type RangeKey = '7d' | '30d' | '90d' | '180d' | 'all' | 'custom'
+// MT5-style report periods (matching the MetaTrader 5 history window list)
+export type RangeKey =
+  | 'today'
+  | '3d'
+  | 'week'
+  | 'month'
+  | '3m'
+  | '6m'
+  | 'all'
+  | 'custom'
 export type Direction = 'BUY' | 'SELL'
 export type TradeMode = 'REAL' | 'DEMO' | 'CONTEST'
 
 export const RANGE_LABELS: Record<RangeKey, string> = {
-  '7d': '7D',
-  '30d': '30D',
-  '90d': '90D',
-  '180d': '6M',
-  all: 'All',
+  today: 'Today',
+  '3d': 'Last 3 days',
+  week: 'Last week',
+  month: 'Last month',
+  '3m': 'Last 3 months',
+  '6m': 'Last 6 months',
+  all: 'Entire history',
   custom: 'Custom',
 }
 
@@ -308,8 +319,6 @@ export interface JournalTrade {
   incompleteHistory: boolean
   magicNumber: string | null
   mt5Comment: string | null
-  strategyId: string | null
-  strategyName: string | null
   mistakes: string[]
   emotion: string | null
   notes: string | null

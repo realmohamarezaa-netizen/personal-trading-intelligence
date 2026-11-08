@@ -166,7 +166,6 @@ export interface EngineTrade {
   holdingMinutes: number | null
   status: string
   incompleteHistory: boolean
-  strategyId: string | null
   magicNumber: number | null
   mistakes: string[]
   emotion: string | null
@@ -217,11 +216,85 @@ function profitFactor(gp: number, gl: number): number | null {
   return gp / gl
 }
 
-const RANGE_MS: Record<Exclude<RangeKey, 'all' | 'custom'>, number> = {
-  '7d': 7 * 864e5,
-  '30d': 30 * 864e5,
-  '90d': 90 * 864e5,
-  '180d': 180 * 864e5,
+// ─── MT5-style analytics periods ─────────────────────────────────────────────
+// Range windows match the MetaTrader 5 history list (Today / Last 3 days /
+// Last week / Last month / Last 3 months / Last 6 months / Entire history)
+// and are calendar-aligned to the ACCOUNT timezone — "Today" starts at the
+// account's local midnight, "Last month" spans the trailing 30 calendar
+// days including today, and the 3/6-month windows subtract whole months.
+
+/** Trailing calendar days (including today) for the day-based ranges. */
+const RANGE_DAYS: Record<Exclude<RangeKey, 'all' | 'custom' | 'today' | '3m' | '6m'>, number> = {
+  '3d': 3,
+  week: 7,
+  month: 30,
+}
+
+/** Wall-clock Y/M/D of `d` in `tz`. */
+function ymdIn(tz: string, d: Date): { y: number; m: number; d: number } {
+  const [y, m, day] = dateKeyIn(tz, d).split('-').map(Number)
+  return { y, m, d: day }
+}
+
+/** UTC instant whose wall-clock time in `tz` equals the given local date/time. */
+function wallClockToUtc(tz: string, y: number, m: number, d: number, hour = 0, minute = 0): Date {
+  const stamp = Date.UTC(y, m - 1, d, hour, minute)
+  const f = fmtFor(
+    new Map(),
+    tz,
+    { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }
+  )
+  const asUtcOf = (t: number): number => {
+    const parts: Record<string, number> = {}
+    for (const p of f.formatToParts(new Date(t))) {
+      if (p.type !== 'literal') parts[p.type] = parseInt(p.value, 10)
+    }
+    return Date.UTC(parts.year, parts.month - 1, parts.day, (parts.hour ?? 0) % 24, parts.minute ?? 0)
+  }
+  let guess = stamp
+  for (let i = 0; i < 2; i++) {
+    const diff = asUtcOf(guess) - stamp
+    if (diff === 0) break
+    guess -= diff
+  }
+  return new Date(guess)
+}
+
+/** Start of the local day (00:00) that contains `d`, in `tz`. */
+export function startOfDayIn(tz: string, d: Date): Date {
+  const { y, m, d: day } = ymdIn(tz, d)
+  return wallClockToUtc(tz, y, m, day, 0, 0)
+}
+
+/**
+ * Start of the analytics window for an MT5-style range key, aligned to the
+ * account timezone. Returns null for 'all' / 'custom' (custom supplies its
+ * own explicit window via EngineOptions.from).
+ */
+export function rangeStartDate(range: RangeKey, tz: string, now: Date = new Date()): Date | null {
+  switch (range) {
+    case 'all':
+    case 'custom':
+      return null
+    case 'today':
+      return startOfDayIn(tz, now)
+    case '3m':
+    case '6m': {
+      // subtract whole calendar months from today's local date, clamping the
+      // day (e.g. May 31 − 3 months → Feb 28/29), then take local midnight
+      const months = range === '3m' ? 3 : 6
+      const { y, m, d } = ymdIn(tz, now)
+      const total = y * 12 + (m - 1) - months
+      const y2 = Math.floor(total / 12)
+      const m2 = ((total % 12) + 12) % 12 + 1
+      const daysInMonth = new Date(Date.UTC(y2, m2, 0)).getUTCDate()
+      return wallClockToUtc(tz, y2, m2, Math.min(d, daysInMonth), 0, 0)
+    }
+    default: {
+      const days = RANGE_DAYS[range]
+      return startOfDayIn(tz, new Date(now.getTime() - (days - 1) * 864e5))
+    }
+  }
 }
 
 // ─── Core engine ─────────────────────────────────────────────────────────────
@@ -232,12 +305,10 @@ export function computeAnalytics(
 ): AnalyticsData {
   const tz = input.account.timezone || 'Asia/Tehran'
   const now = new Date()
+  // MT5-style periods, calendar-aligned to the account timezone; 'custom'
+  // uses the explicit window passed by the caller, 'all' has no lower bound.
   const from: Date | null =
-    opts.range === 'all'
-      ? null
-      : opts.range === 'custom'
-        ? (opts.from ?? null)
-        : new Date(now.getTime() - RANGE_MS[opts.range])
+    opts.range === 'custom' ? (opts.from ?? null) : rangeStartDate(opts.range, tz, now)
   const to: Date = opts.range === 'custom' && opts.to ? opts.to : now
 
   const allClosed = input.trades
@@ -809,108 +880,6 @@ export function computeAnalytics(
       demoMode: input.demoMode,
     },
   }
-}
-
-// ─── Strategy statistics (P4) ────────────────────────────────────────────────
-
-export interface StrategyStat {
-  strategyId: string | null
-  name: string
-  color: string | null
-  totalTrades: number
-  wins: number
-  losses: number
-  winRate: number
-  profitFactor: number | null
-  expectancy: number | null
-  avgR: number | null
-  maxDd: number
-  maxConsecLosses: number
-  netProfit: number
-  bySymbol: { symbol: string; trades: number; pnl: number }[]
-  byHour: { hour: number; trades: number; pnl: number }[]
-}
-
-/** Per-strategy performance over closed trades (account level). */
-export function computeStrategyStats(
-  trades: EngineTrade[],
-  strategies: { id: string; name: string; color: string | null }[],
-  tz: string
-): StrategyStat[] {
-  const closed = trades.filter((t) => t.status === 'CLOSED' && t.closeTime)
-  const buckets = new Map<string, EngineTrade[]>()
-  for (const t of closed) {
-    const key = t.strategyId ?? 'unassigned'
-    const arr = buckets.get(key) ?? []
-    arr.push(t)
-    buckets.set(key, arr)
-  }
-
-  const stats: StrategyStat[] = []
-  for (const [key, ts] of buckets) {
-    const s = strategies.find((x) => x.id === key)
-    const name = key === 'unassigned' ? 'Unassigned' : (s?.name ?? key)
-    const wins = ts.filter((t) => t.netProfit > EPS)
-    const losses = ts.filter((t) => t.netProfit < -EPS)
-    const gp = sum(wins.map((t) => t.netProfit))
-    const gl = Math.abs(sum(losses.map((t) => t.netProfit)))
-    const rv = ts.map((t) => t.rMultiple).filter((r): r is number => r !== null)
-
-    let cum = 0
-    let pk = 0
-    let mdd = 0
-    let curL = 0
-    let maxL = 0
-    for (const t of [...ts].sort((a, b) => a.closeTime!.getTime() - b.closeTime!.getTime())) {
-      cum += t.netProfit
-      if (cum > pk) pk = cum
-      if (pk - cum > mdd) mdd = pk - cum
-      if (t.netProfit < -EPS) {
-        curL++
-        maxL = Math.max(maxL, curL)
-      } else if (t.netProfit > EPS) {
-        curL = 0
-      }
-    }
-
-    const symMap = new Map<string, { trades: number; pnl: number }>()
-    const hourMap = new Map<number, { trades: number; pnl: number }>()
-    for (const t of ts) {
-      const se = symMap.get(t.symbol) ?? { trades: 0, pnl: 0 }
-      se.trades++
-      se.pnl += t.netProfit
-      symMap.set(t.symbol, se)
-      const h = hourIn(tz, t.openTime)
-      const he = hourMap.get(h) ?? { trades: 0, pnl: 0 }
-      he.trades++
-      he.pnl += t.netProfit
-      hourMap.set(h, he)
-    }
-
-    stats.push({
-      strategyId: key === 'unassigned' ? null : key,
-      name,
-      color: s?.color ?? null,
-      totalTrades: ts.length,
-      wins: wins.length,
-      losses: losses.length,
-      winRate: wins.length + losses.length ? round1((wins.length / (wins.length + losses.length)) * 100) : 0,
-      profitFactor: profitFactor(gp, gl) === null ? null : round2(profitFactor(gp, gl)!),
-      expectancy: ts.length ? round2(mean(ts.map((t) => t.netProfit))) : null,
-      avgR: rv.length ? round2(mean(rv)) : null,
-      maxDd: round2(mdd),
-      maxConsecLosses: maxL,
-      netProfit: round2(sum(ts.map((t) => t.netProfit))),
-      bySymbol: [...symMap.entries()]
-        .map(([symbol, e]) => ({ symbol, trades: e.trades, pnl: round2(e.pnl) }))
-        .sort((a, b) => b.pnl - a.pnl)
-        .slice(0, 8),
-      byHour: [...hourMap.entries()]
-        .map(([hour, e]) => ({ hour, trades: e.trades, pnl: round2(e.pnl) }))
-        .sort((a, b) => a.hour - b.hour),
-    })
-  }
-  return stats.sort((a, b) => b.netProfit - a.netProfit)
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

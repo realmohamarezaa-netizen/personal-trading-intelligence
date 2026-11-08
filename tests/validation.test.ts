@@ -75,10 +75,12 @@ describe('sync payload validation (P5)', () => {
 })
 
 describe('journal / analytics / settings query validation', () => {
-  test('range whitelist', () => {
-    expect(journalQuerySchema.safeParse({ range: '30d' }).success).toBe(true)
+  test('range whitelist (MT5-style periods)', () => {
+    expect(journalQuerySchema.safeParse({ range: 'month' }).success).toBe(true)
+    expect(journalQuerySchema.safeParse({ range: 'today' }).success).toBe(true)
+    expect(journalQuerySchema.safeParse({ range: 'custom' }).success).toBe(true)
     expect(journalQuerySchema.safeParse({ range: 'bogus' }).success).toBe(false)
-    expect(analyticsQuerySchema.safeParse({ range: '90d' }).success).toBe(true)
+    expect(analyticsQuerySchema.safeParse({ range: '6m' }).success).toBe(true)
     expect(analyticsQuerySchema.safeParse({ range: 'DROP TABLE' }).success).toBe(false)
   })
 

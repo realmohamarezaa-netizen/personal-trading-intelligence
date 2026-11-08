@@ -1,13 +1,12 @@
 // Personal Trading Intelligence — data layer
 // Local-first trading analytics schema (SQLite)
 //
-// v1.3.0 changes (additive only — existing user data is preserved):
+// v1.3.1 changes (existing user data is preserved):
 //  - Trade identity: one row per CLOSING deal (partial closes are separate
 //    legs) + one ephemeral row per live OPEN position. Legacy position-merged
 //    rows keep dealTicket = NULL. positionId keeps its legacy 32-bit value
 //    (now nullable + non-unique); positionTicket/dealTicket are BigInt and
 //    carry the full 64-bit MT5 tickets.
-//  - Strategy support: magic-number mapping + manual assignment.
 //  - CashFlow: every non-trade MT5 deal type is retained (category) with its
 //    external deal ticket (idempotent sync) instead of being silently dropped.
 //  - Account: tradeMode (REAL/DEMO/CONTEST) + user timezone for day bucketing.
@@ -85,11 +84,9 @@ model Trade {
   // True when the position was opened before the sync window and MT5 could
   // not restore its entry data (openTime/openPrice are best-effort then).
   incompleteHistory Boolean @default(false)
-  // MT5 metadata (P4)
+  // MT5 metadata
   magicNumber    BigInt?
   mt5Comment     String?
-  strategyId     String?
-  strategy       Strategy? @relation(fields: [strategyId], references: [id], onDelete: SetNull)
   mistakes       String   @default("[]") // JSON array of strings
   emotion        String?
   notes          String?
@@ -100,23 +97,7 @@ model Trade {
   @@index([accountId, closeTime])
   @@index([accountId, status])
   @@index([accountId, positionTicket])
-  @@index([accountId, strategyId])
   @@index([symbol])
-}
-
-// Trading strategy library (P4): manual CRUD + magic-number auto-mapping.
-model Strategy {
-  id           String   @id @default(cuid())
-  name         String   @unique
-  description  String?
-  color        String? // hex, e.g. "#34d399"
-  // Comma-separated MT5 magic numbers; a synced trade whose magic matches
-  // gets auto-assigned to this strategy (unless manually overridden).
-  magicNumbers String   @default("")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  trades Trade[]
 }
 
 // Periodic balance/equity snapshots (for floating drawdown measurement).

@@ -38,8 +38,6 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
         ...(body.data.mistakes !== undefined ? { mistakes: JSON.stringify(body.data.mistakes) } : {}),
         ...(body.data.emotion !== undefined ? { emotion: body.data.emotion } : {}),
         ...(body.data.notes !== undefined ? { notes: body.data.notes } : {}),
-        // Manual strategy (re-)assignment — wins over the magic-number mapping
-        ...(body.data.strategyId !== undefined ? { strategyId: body.data.strategyId } : {}),
       },
     })
 

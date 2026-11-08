@@ -13,7 +13,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
-const RANGES: RangeKey[] = ['7d', '30d', '90d', '180d', 'all', 'custom']
+// MT5 history-window periods (MetaTrader 5 defaults) + explicit custom window
+const RANGES: RangeKey[] = ['today', '3d', 'week', 'month', '3m', '6m', 'all', 'custom']
 
 export function RangeFilter({
   value,

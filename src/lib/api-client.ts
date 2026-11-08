@@ -24,7 +24,6 @@ export interface JournalFilters {
   status?: 'OPEN' | 'CLOSED'
   mistake?: string
   emotion?: string
-  strategyId?: string
   q?: string
   limit?: number
   accountId?: string
@@ -65,7 +64,6 @@ export async function fetchJournal(f: JournalFilters): Promise<JournalResponse> 
   if (f.status) params.set('status', f.status)
   if (f.mistake) params.set('mistake', f.mistake)
   if (f.emotion) params.set('emotion', f.emotion)
-  if (f.strategyId) params.set('strategyId', f.strategyId)
   if (f.q) params.set('q', f.q)
   if (f.limit) params.set('limit', String(f.limit))
   if (f.accountId) params.set('accountId', f.accountId)
@@ -79,7 +77,7 @@ export async function fetchJournal(f: JournalFilters): Promise<JournalResponse> 
 
 export async function updateTrade(
   id: string,
-  body: { mistakes?: string[]; emotion?: string | null; notes?: string | null; strategyId?: string | null }
+  body: { mistakes?: string[]; emotion?: string | null; notes?: string | null }
 ): Promise<void> {
   const res = await fetch(`/api/trades/${id}`, {
     method: 'PATCH',
@@ -102,79 +100,6 @@ export async function updateSettingsTimezone(timezone: string): Promise<{ ok: bo
     body: JSON.stringify({ timezone }),
   })
   return handle<{ ok: boolean; timezone: string }>(res)
-}
-
-// ─── Strategies (P4) ─────────────────────────────────────────────────────
-
-export interface StrategyRow {
-  id: string
-  name: string
-  description: string | null
-  color: string | null
-  magicNumbers: string
-  createdAt: string
-}
-
-export interface StrategyStatRow {
-  strategyId: string | null
-  name: string
-  color: string | null
-  totalTrades: number
-  wins: number
-  losses: number
-  winRate: number
-  profitFactor: number | null
-  expectancy: number | null
-  avgR: number | null
-  maxDd: number
-  maxConsecLosses: number
-  netProfit: number
-  bySymbol: { symbol: string; trades: number; pnl: number }[]
-  byHour: { hour: number; trades: number; pnl: number }[]
-}
-
-export interface StrategiesResponse {
-  strategies: StrategyRow[]
-  stats: StrategyStatRow[]
-  timezone: string
-  currency: string
-}
-
-export async function fetchStrategies(accountId?: string): Promise<StrategiesResponse> {
-  const qs = accountId ? `?accountId=${encodeURIComponent(accountId)}` : ''
-  const res = await fetch(`/api/strategies${qs}`, { cache: 'no-store' })
-  return handle<StrategiesResponse>(res)
-}
-
-export async function createStrategy(body: {
-  name: string
-  description?: string
-  color?: string
-  magicNumbers?: string
-}): Promise<{ ok: boolean }> {
-  const res = await fetch('/api/strategies', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-  return handle<{ ok: boolean }>(res)
-}
-
-export async function updateStrategy(
-  id: string,
-  body: { name?: string; description?: string; color?: string; magicNumbers?: string }
-): Promise<{ ok: boolean }> {
-  const res = await fetch(`/api/strategies/${id}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-  return handle<{ ok: boolean }>(res)
-}
-
-export async function deleteStrategy(id: string): Promise<{ ok: boolean }> {
-  const res = await fetch(`/api/strategies/${id}`, { method: 'DELETE' })
-  return handle<{ ok: boolean }>(res)
 }
 
 export async function fetchDownloadInfo(): Promise<DownloadInfo> {

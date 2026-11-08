@@ -4,7 +4,6 @@
 import { describe, expect, test } from 'bun:test'
 import {
   computeAnalytics,
-  computeStrategyStats,
   dateKeyIn,
   hourIn,
   type EngineInput,
@@ -22,7 +21,6 @@ function closedTrade(opts: {
   closeOffsetMin: number
   symbol?: string
   direction?: 'BUY' | 'SELL'
-  strategyId?: string | null
   openOffsetMin?: number
 }): EngineTrade {
   seq++
@@ -52,7 +50,6 @@ function closedTrade(opts: {
     holdingMinutes: opts.closeOffsetMin,
     status: 'CLOSED',
     incompleteHistory: false,
-    strategyId: opts.strategyId ?? null,
     magicNumber: null,
     mistakes: [],
     emotion: null,
@@ -190,8 +187,8 @@ describe('drawdown math on a hand-computed balance path', () => {
     old.closeTime = new Date(now - 60 * 864e5)
     const recent = closedTrade({ rMultiple: -1, netProfit: -100, closeOffsetMin: 10 })
     recent.closeTime = new Date(now - 2 * 864e5)
-    const out30 = computeAnalytics(makeInput({ trades: [old, recent] }), { range: '30d' })
-    expect(out30.performance.recoveryFactor).toBeCloseTo(-1, 2)
+    const outMonth = computeAnalytics(makeInput({ trades: [old, recent] }), { range: 'month' })
+    expect(outMonth.performance.recoveryFactor).toBeCloseTo(-1, 2)
   })
 })
 
@@ -272,32 +269,5 @@ describe('best/worst hours need a minimum sample (P2.8)', () => {
     expect(out.time.bestHour).toBeNull()
     expect(out.time.worstHour).toBeNull()
     expect(out.time.minSample).toBe(3)
-  })
-})
-
-describe('strategy statistics (P4)', () => {
-  test('per-strategy stats + unassigned bucket', () => {
-    const strategies = [
-      { id: 's1', name: 'London Breakout', color: '#34d399' },
-      { id: 's2', name: 'NY Reversal', color: '#f59e0b' },
-    ]
-    const trades: EngineTrade[] = [
-      { ...closedTrade({ rMultiple: 2, netProfit: 200, closeOffsetMin: 10 }), strategyId: 's1' },
-      { ...closedTrade({ rMultiple: -1, netProfit: -100, closeOffsetMin: 10 }), strategyId: 's1' },
-      { ...closedTrade({ rMultiple: 1, netProfit: 100, closeOffsetMin: 10 }), strategyId: 's2' },
-      { ...closedTrade({ rMultiple: -0.5, netProfit: -50, closeOffsetMin: 10 }) }, // unassigned
-    ]
-    const stats = computeStrategyStats(trades, strategies, 'UTC')
-    expect(stats.length).toBe(3)
-    const s1 = stats.find((s) => s.strategyId === 's1')!
-    expect(s1.totalTrades).toBe(2)
-    expect(s1.netProfit).toBe(100)
-    expect(s1.winRate).toBe(50)
-    expect(s1.maxConsecLosses).toBe(1)
-    const un = stats.find((s) => s.strategyId === null)!
-    expect(un.name).toBe('Unassigned')
-    expect(un.totalTrades).toBe(1)
-    // maxDD per strategy is its own P/L curve dip
-    expect(s1.maxDd).toBe(100)
   })
 })

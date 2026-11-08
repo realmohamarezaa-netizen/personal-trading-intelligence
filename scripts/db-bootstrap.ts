@@ -11,7 +11,7 @@ async function main() {
   console.log('Applied :', applied.length ? applied.join(', ') : '(nothing pending)')
   console.log('Skipped :', skipped.length ? skipped.join(', ') : '(none)')
 
-  const tables = ['Account', 'Trade', 'Strategy', 'EquitySnapshot', 'CashFlow', 'SyncLog']
+  const tables = ['Account', 'Trade', 'EquitySnapshot', 'CashFlow', 'SyncLog']
   console.log('--- row counts ---')
   for (const t of tables) {
     try {

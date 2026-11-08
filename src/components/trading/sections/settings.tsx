@@ -619,7 +619,7 @@ python sync.py --api http://127.0.0.1:3000 --days 180`}
             {data.syncLogs.length === 0 ? (
               <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground">
                 <AlertTriangle className="h-4 w-4 shrink-0 text-[var(--warn)]" aria-hidden />
-                No sync yet — running on demo data
+                No sync yet — connector data appears here after the first sync
               </div>
             ) : (
               <div className="max-h-60 overflow-y-auto scroll-slim">

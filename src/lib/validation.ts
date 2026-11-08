@@ -97,7 +97,6 @@ export const tradePatchSchema = z
     mistakes: z.array(z.string().min(1).max(64)).max(12).optional(),
     emotion: z.string().min(1).max(32).nullable().optional(),
     notes: z.string().max(4000).nullable().optional(),
-    strategyId: z.string().cuid().nullable().optional(),
   })
   .strict()
 
@@ -123,9 +122,11 @@ export const settingsPatchSchema = z
   .strict()
 
 // ─── Analytics / journal query params ────────────────────────────────────────
-export const rangeKeys = ['7d', '30d', '90d', '180d', 'all'] as const
+// MT5-style periods: Today / Last 3 days / Last week / Last month /
+// Last 3 months / Last 6 months / Entire history (+ explicit custom window).
+export const rangeKeys = ['today', '3d', 'week', 'month', '3m', '6m', 'all'] as const
 export const analyticsQuerySchema = z.object({
-  range: z.enum(rangeKeys).default('30d'),
+  range: z.enum([...rangeKeys, 'custom']).default('all'),
   symbol: z.string().max(64).optional(),
   accountId: z.string().max(64).optional(),
   from: z.string().refine((s) => !Number.isNaN(Date.parse(s)), 'valid from date').optional(),
@@ -133,13 +134,12 @@ export const analyticsQuerySchema = z.object({
 })
 
 export const journalQuerySchema = z.object({
-  range: z.enum(rangeKeys).default('all'),
+  range: z.enum([...rangeKeys, 'custom']).default('all'),
   status: z.enum(['ALL', 'OPEN', 'CLOSED']).default('ALL'),
   result: z.enum(['ALL', 'WIN', 'LOSS', 'BE']).default('ALL'),
   mistake: z.string().max(64).default('ALL'),
   emotion: z.string().max(32).default('ALL'),
   symbol: z.string().max(64).default('ALL'),
-  strategyId: z.string().max(64).default('ALL'),
   q: z.string().max(128).default(''),
   limit: z.coerce.number().int().min(1).max(1000).default(200),
   from: z.string().refine((s) => !Number.isNaN(Date.parse(s))).optional(),

@@ -7,7 +7,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { ChevronRight, Download, Loader2, RefreshCw, Search } from 'lucide-react'
 import type { AnalyticsData, JournalTrade, RangeKey } from '@/lib/types'
 import { TRADE_EMOTIONS, TRADE_MISTAKES } from '@/lib/types'
-import { fetchJournal, fetchStrategies, updateTrade } from '@/lib/api-client'
+import { fetchJournal, updateTrade } from '@/lib/api-client'
 import { fmtDateTime, fmtDuration, fmtNum, pnlTone } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -119,18 +119,11 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
   const queryClient = useQueryClient()
   const currency = data.account.currency
 
-  // Strategy library for the filter + manual (re-)assignment
-  const { data: stratData } = useQuery({
-    queryKey: ['strategies'],
-    queryFn: () => fetchStrategies(),
-  })
-
   // Local filter state
-  const [range, setRange] = useState<RangeKey>('30d')
+  const [range, setRange] = useState<RangeKey>('month')
   const [symbol, setSymbol] = useState('')
   const [result, setResult] = useState<ResultKey>('')
   const [status, setStatus] = useState<StatusKey>('CLOSED')
-  const [strategyId, setStrategyId] = useState('')
   const [q, setQ] = useState('')
 
   const filters = useMemo(
@@ -139,11 +132,10 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
       symbol: symbol || undefined,
       result: (result || undefined) as 'win' | 'loss' | 'be' | undefined,
       status: (status || undefined) as 'OPEN' | 'CLOSED' | undefined,
-      strategyId: strategyId || undefined,
       accountId: data.account.id,
       q: q || undefined,
     }),
-    [range, symbol, result, status, strategyId, q, data.account.id]
+    [range, symbol, result, status, q, data.account.id]
   )
 
   // keepPreviousData: filter changes keep the current table visible (dimmed)
@@ -163,7 +155,6 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
   const [editMistakes, setEditMistakes] = useState<string[]>([])
   const [editEmotion, setEditEmotion] = useState<string>('')
   const [editNotes, setEditNotes] = useState<string>('')
-  const [editStrategyId, setEditStrategyId] = useState<string>('__none__')
 
   const selectedTrade = trades.find((t) => t.id === selectedId) ?? null
 
@@ -172,7 +163,6 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
     setEditMistakes([...t.mistakes])
     setEditEmotion(t.emotion ?? '')
     setEditNotes(t.notes ?? '')
-    setEditStrategyId(t.strategyId ?? '__none__')
   }
 
   // Save mutation
@@ -182,7 +172,6 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
     onSuccess: () => {
       toast({ title: 'Trade updated' })
       queryClient.invalidateQueries({ queryKey: ['journal'] })
-      queryClient.invalidateQueries({ queryKey: ['strategies'] })
       setSelectedId(null)
     },
     onError: (err: Error) => {
@@ -198,7 +187,6 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
         mistakes: editMistakes,
         emotion: editEmotion || null,
         notes: editNotes || null,
-        strategyId: editStrategyId === '__none__' ? null : editStrategyId,
       },
     })
   }
@@ -210,7 +198,7 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
       'Position Ticket', 'Position ID (legacy)', 'Symbol', 'Direction', 'Volume', 'Open Time', 'Close Time',
       'Open Price', 'Close Price', 'Stop Loss', 'Take Profit', 'Initial SL', 'Risk Amount', 'Commission', 'Swap',
       'Profit', 'Net P/L', 'Pips', 'R Multiple', 'Duration (min)', 'Status', 'Incomplete History',
-      'Magic', 'Strategy', 'MT5 Comment', 'Mistakes', 'Emotion', 'Notes',
+      'Magic', 'MT5 Comment', 'Mistakes', 'Emotion', 'Notes',
     ]
     const esc = (v: unknown) => {
       const s = v === null || v === undefined ? '' : String(v)
@@ -222,7 +210,7 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
         t.openPrice, t.closePrice ?? '', t.stopLoss ?? '', t.takeProfit ?? '',
         t.initialStopLoss ?? '', t.riskAmount ?? '', t.commission, t.swap, t.profit, t.netProfit,
         t.pips ?? '', t.rMultiple ?? '', t.holdingMinutes ?? '', t.status,
-        t.incompleteHistory ? 'yes' : 'no', t.magicNumber ?? '', t.strategyName ?? '', t.mt5Comment ?? '',
+        t.incompleteHistory ? 'yes' : 'no', t.magicNumber ?? '', t.mt5Comment ?? '',
         t.mistakes.join('; '), t.emotion ?? '', t.notes ?? '',
       ]
         .map(esc)
@@ -274,12 +262,6 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
             { value: 'CLOSED', label: 'Closed' },
           ]}
           onChange={(v) => setStatus(v as StatusKey)}
-        />
-        <DimensionFilter
-          label="Strategy"
-          value={strategyId}
-          options={(stratData?.strategies ?? []).map((s) => ({ value: s.id, label: s.name }))}
-          onChange={setStrategyId}
         />
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden />
@@ -366,7 +348,6 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
                 <TableRow>
                   <TableHead className="text-xs">#</TableHead>
                   <TableHead className="text-xs">Symbol</TableHead>
-                  <TableHead className="text-xs">Strategy</TableHead>
                   <TableHead className="text-xs">Volume</TableHead>
                   <TableHead className="text-xs">Open Time</TableHead>
                   <TableHead className="text-xs">Duration</TableHead>
@@ -379,7 +360,7 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
               <TableBody>
                 {trades.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="py-10 text-center text-xs text-muted-foreground">
+                    <TableCell colSpan={9} className="py-10 text-center text-xs text-muted-foreground">
                       No trades match the current filters
                     </TableCell>
                   </TableRow>
@@ -416,15 +397,6 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
                               </span>
                             )}
                           </div>
-                        </TableCell>
-                        <TableCell className="text-xs">
-                          {t.strategyName ? (
-                            <span className="inline-flex max-w-[110px] items-center rounded bg-muted/40 px-1.5 py-0.5 text-[10px]" title={t.strategyName}>
-                              <span className="truncate">{t.strategyName}</span>
-                            </span>
-                          ) : (
-                            <span className="text-[10px] text-muted-foreground">—</span>
-                          )}
                         </TableCell>
                         <TableCell className="num text-xs">{fmtNum(t.volume, 2)}</TableCell>
                         <TableCell className="text-xs text-muted-foreground">{fmtDateTime(t.openTime)}</TableCell>
@@ -559,24 +531,6 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
                       <SelectItem value="__none__">—</SelectItem>
                       {TRADE_EMOTIONS.map((e) => (
                         <SelectItem key={e} value={e}>{e}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <EditorLabel hint="overrides the magic-number mapping">Strategy</EditorLabel>
-                  <Select
-                    value={editStrategyId}
-                    onValueChange={setEditStrategyId}
-                  >
-                    <SelectTrigger className="h-8 w-full text-xs" aria-label="Strategy">
-                      <SelectValue placeholder="Select strategy" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">— Unassigned —</SelectItem>
-                      {(stratData?.strategies ?? []).map((s) => (
-                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>

@@ -100,7 +100,7 @@ describe('migration 0002 — v1.2.x upgrade preserves every row', () => {
     await exec(`INSERT INTO "CashFlow" ("id","accountId","ts","type","amount","comment") VALUES ('c1','demo',CURRENT_TIMESTAMP,'DEPOSIT',10000,'Initial deposit')`)
 
     const { applied } = await bootstrapDatabase()
-    expect(applied).toContain('0002_risk_strategy_multiaccount')
+    expect(applied).toContain('0002_risk_multiaccount')
 
     // every legacy row survived
     const trades = await raw<{ id: string; positionId: number; positionTicket: bigint | null; notes: string | null; netProfit: number }>(`SELECT * FROM "Trade" ORDER BY "id"`)
@@ -116,7 +116,7 @@ describe('migration 0002 — v1.2.x upgrade preserves every row', () => {
     expect(trades.every((t) => !('dealTicket' in t ? false : false))).toBe(true)
     const cols = await raw(`PRAGMA table_info("Trade")`)
     const names = cols.map((c) => String((c as Record<string, unknown>).name))
-    for (const expected of ['positionTicket', 'dealTicket', 'magicNumber', 'strategyId', 'initialStopLoss', 'riskAmount', 'incompleteHistory']) {
+    for (const expected of ['positionTicket', 'dealTicket', 'magicNumber', 'initialStopLoss', 'riskAmount', 'incompleteHistory']) {
       expect(names).toContain(expected)
     }
     // the 32-bit global unique index is GONE (per-account 64-bit identity now)
@@ -141,7 +141,7 @@ describe('migration 0001 — fresh database baseline', () => {
     await wipeSchema()
     const { applied } = await bootstrapDatabase()
     expect(applied).toContain('0001_baseline')
-    for (const t of ['Account', 'Trade', 'Strategy', 'EquitySnapshot', 'CashFlow', 'SyncLog']) {
+    for (const t of ['Account', 'Trade', 'EquitySnapshot', 'CashFlow', 'SyncLog']) {
       const rows = await raw(`SELECT name FROM sqlite_master WHERE type='table' AND name='${t}'`)
       expect(rows.length).toBe(1)
     }
@@ -187,7 +187,6 @@ async function cleanRows(): Promise<void> {
   await exec('DELETE FROM "EquitySnapshot"')
   await exec('DELETE FROM "CashFlow"')
   await exec('DELETE FROM "Trade"')
-  await exec('DELETE FROM "Strategy"')
   await exec('DELETE FROM "Account"')
 }
 

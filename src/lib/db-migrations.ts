@@ -6,7 +6,7 @@
 //   - transactional (runner wraps each script; a failure rolls it back).
 //
 // 0001_baseline     — brand-new/empty database files (first install)
-// 0002_risk_strategy— v1.2.x databases (positionId Int @unique, no Strategy…)
+// 0002_risk_multiaccount — v1.2.x databases (positionId Int @unique, no tradeMode…)
 //
 // SQL below is generated with `prisma migrate diff` from the schema.prisma
 // of this exact version and reviewed line-by-line: the table redefinitions
@@ -56,23 +56,12 @@ CREATE TABLE "Trade" (
     "incompleteHistory" BOOLEAN NOT NULL DEFAULT false,
     "magicNumber" BIGINT,
     "mt5Comment" TEXT,
-    "strategyId" TEXT,
     "mistakes" TEXT NOT NULL DEFAULT '[]',
     "emotion" TEXT,
     "notes" TEXT,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" DATETIME NOT NULL,
-    CONSTRAINT "Trade_accountId_fkey" FOREIGN KEY ("accountId") REFERENCES "Account" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
-    CONSTRAINT "Trade_strategyId_fkey" FOREIGN KEY ("strategyId") REFERENCES "Strategy" ("id") ON DELETE SET NULL ON UPDATE CASCADE
-);
-CREATE TABLE "Strategy" (
-    "id" TEXT NOT NULL PRIMARY KEY,
-    "name" TEXT NOT NULL,
-    "description" TEXT,
-    "color" TEXT,
-    "magicNumbers" TEXT NOT NULL DEFAULT '',
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL
+    CONSTRAINT "Trade_accountId_fkey" FOREIGN KEY ("accountId") REFERENCES "Account" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 CREATE TABLE "EquitySnapshot" (
     "id" TEXT NOT NULL PRIMARY KEY,
@@ -107,10 +96,8 @@ CREATE TABLE "SyncLog" (
 CREATE INDEX "Trade_accountId_closeTime_idx" ON "Trade"("accountId", "closeTime");
 CREATE INDEX "Trade_accountId_status_idx" ON "Trade"("accountId", "status");
 CREATE INDEX "Trade_accountId_positionTicket_idx" ON "Trade"("accountId", "positionTicket");
-CREATE INDEX "Trade_accountId_strategyId_idx" ON "Trade"("accountId", "strategyId");
 CREATE INDEX "Trade_symbol_idx" ON "Trade"("symbol");
 CREATE UNIQUE INDEX "Trade_accountId_dealTicket_key" ON "Trade"("accountId", "dealTicket");
-CREATE UNIQUE INDEX "Strategy_name_key" ON "Strategy"("name");
 CREATE UNIQUE INDEX "EquitySnapshot_accountId_ts_key" ON "EquitySnapshot"("accountId", "ts");
 CREATE INDEX "CashFlow_accountId_ts_idx" ON "CashFlow"("accountId", "ts");
 CREATE UNIQUE INDEX "CashFlow_accountId_externalId_key" ON "CashFlow"("accountId", "externalId");
@@ -126,15 +113,6 @@ CREATE INDEX "SyncLog_accountId_ts_idx" ON "SyncLog"("accountId", "ts");
  * positionTicket/dealTicket with per-account uniqueness.
  */
 const UPGRADE_V12_TO_V13_SQL = `
-CREATE TABLE "Strategy" (
-    "id" TEXT NOT NULL PRIMARY KEY,
-    "name" TEXT NOT NULL,
-    "description" TEXT,
-    "color" TEXT,
-    "magicNumbers" TEXT NOT NULL DEFAULT '',
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL
-);
 PRAGMA defer_foreign_keys=ON;
 PRAGMA foreign_keys=OFF;
 CREATE TABLE "new_Account" (
@@ -198,14 +176,12 @@ CREATE TABLE "new_Trade" (
     "incompleteHistory" BOOLEAN NOT NULL DEFAULT false,
     "magicNumber" BIGINT,
     "mt5Comment" TEXT,
-    "strategyId" TEXT,
     "mistakes" TEXT NOT NULL DEFAULT '[]',
     "emotion" TEXT,
     "notes" TEXT,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" DATETIME NOT NULL,
-    CONSTRAINT "Trade_accountId_fkey" FOREIGN KEY ("accountId") REFERENCES "Account" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
-    CONSTRAINT "Trade_strategyId_fkey" FOREIGN KEY ("strategyId") REFERENCES "Strategy" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+    CONSTRAINT "Trade_accountId_fkey" FOREIGN KEY ("accountId") REFERENCES "Account" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 INSERT INTO "new_Trade" ("accountId", "closePrice", "closeTime", "commission", "createdAt", "direction", "emotion", "holdingMinutes", "id", "mistakes", "netProfit", "notes", "openPrice", "openTime", "pips", "positionId", "profit", "rMultiple", "status", "stopLoss", "swap", "symbol", "takeProfit", "updatedAt", "volume") SELECT "accountId", "closePrice", "closeTime", "commission", "createdAt", "direction", "emotion", "holdingMinutes", "id", "mistakes", "netProfit", "notes", "openPrice", "openTime", "pips", "positionId", "profit", "rMultiple", "status", "stopLoss", "swap", "symbol", "takeProfit", "updatedAt", "volume" FROM "Trade";
 DROP TABLE "Trade";
@@ -213,12 +189,10 @@ ALTER TABLE "new_Trade" RENAME TO "Trade";
 CREATE INDEX "Trade_accountId_closeTime_idx" ON "Trade"("accountId", "closeTime");
 CREATE INDEX "Trade_accountId_status_idx" ON "Trade"("accountId", "status");
 CREATE INDEX "Trade_accountId_positionTicket_idx" ON "Trade"("accountId", "positionTicket");
-CREATE INDEX "Trade_accountId_strategyId_idx" ON "Trade"("accountId", "strategyId");
 CREATE INDEX "Trade_symbol_idx" ON "Trade"("symbol");
 CREATE UNIQUE INDEX "Trade_accountId_dealTicket_key" ON "Trade"("accountId", "dealTicket");
 PRAGMA foreign_keys=ON;
 PRAGMA defer_foreign_keys=OFF;
-CREATE UNIQUE INDEX "Strategy_name_key" ON "Strategy"("name");
 CREATE INDEX "SyncLog_accountId_ts_idx" ON "SyncLog"("accountId", "ts");
 -- data-preserving backfills (v1.3.0)
 UPDATE "Trade" SET "positionTicket" = "positionId" WHERE "positionTicket" IS NULL AND "positionId" IS NOT NULL;
@@ -276,9 +250,9 @@ export const MIGRATIONS: MigrationScript[] = [
     ),
   },
   {
-    id: '0002_risk_strategy_multiaccount',
+    id: '0002_risk_multiaccount',
     description:
-      'v1.2.x → v1.3.0: 64-bit trade identity, per-deal legs, Strategy, cashflow categories — all legacy rows copied forward',
+      'v1.2.x → v1.3.x: 64-bit trade identity, per-deal legs, cashflow categories — all legacy rows copied forward',
     pending: async (q) =>
       (await tableExists(q, 'Account')) && !(await columnExists(q, 'Account', 'tradeMode')),
     foreignKeysOff: true, // table redefinitions: DROP TABLE Account must NOT cascade into child rows

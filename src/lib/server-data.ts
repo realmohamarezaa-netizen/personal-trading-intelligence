@@ -139,7 +139,6 @@ export async function loadEngineInput(accountId?: string): Promise<EngineInput |
     holdingMinutes: t.holdingMinutes,
     status: t.status,
     incompleteHistory: t.incompleteHistory,
-    strategyId: t.strategyId,
     magicNumber: bigToNum(t.magicNumber),
     mistakes: parseJsonArray(t.mistakes),
     emotion: t.emotion,
@@ -174,8 +173,10 @@ export async function loadEngineInput(accountId?: string): Promise<EngineInput |
     })),
     snapshots,
     lastSyncAt: lastSync?.ts ?? null,
-    // Demo is the seeded 'demo' account or any account MT5 reported as DEMO —
-    // never "no sync log yet".
-    demoMode: account.id === 'demo' || account.tradeMode === 'DEMO',
+    // demoMode means ONLY the generated sample dataset (the seeded 'demo'
+    // account). A real MT5 account stays non-demo even when MT5 itself
+    // reports the account type as DEMO — its data was synced live from the
+    // connector, so the status pill shows MT5 SYNCED, never "demo data".
+    demoMode: account.id === 'demo',
   }
 }

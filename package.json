@@ -1,8 +1,8 @@
 {
   "name": "personal-trading-intelligence",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "private": true,
-  "description": "Local-first, read-only MetaTrader 5 trading analytics dashboard — Next.js 16, Persian RTL, dark UI",
+  "description": "Local-first, read-only MetaTrader 5 trading analytics dashboard \u2014 Next.js 16, Persian RTL, dark UI",
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "next build && node scripts/postbuild.mjs",
@@ -76,6 +76,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/node": "26.6.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",

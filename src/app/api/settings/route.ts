@@ -69,9 +69,10 @@ export async function GET(req: NextRequest) {
       })),
       counts: { trades: tradeCount, open: openCount, snapshots: snapCount, cashflows: cfCount },
       lastSyncAt: lastSync ? lastSync.ts.toISOString() : null,
-      // 'demo' = seeded sample account; a real-but-empty shell created by
-      // Connect MT5 is NOT demo mode (its mt5Login is null until first sync).
-      demoMode: account.id === 'demo' || account.tradeMode === 'DEMO',
+      // 'demo' = seeded sample account ONLY. A real synced MT5 account stays
+      // non-demo even when MT5 itself reports the account type as DEMO —
+      // its data was synced live from the connector (status shows MT5 SYNCED).
+      demoMode: account.id === 'demo',
     }
     return NextResponse.json(res)
   } catch (err) {
