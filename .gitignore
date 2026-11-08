@@ -68,7 +68,6 @@ tool-results
 skills/
 examples/
 mini-services/
-tests/
 /download/
 prompt
 test
@@ -80,3 +79,5 @@ Caddyfile
 # ─── Isolated desktop build output ──────────────
 .next-desktop/
 upload/
+db/backups/
+nsis*.deb

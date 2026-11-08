@@ -80,17 +80,19 @@ export function StatCard({
   )
 }
 
-// PnlValue — signed, colored money
+// PnlValue — signed, colored money (account-currency aware)
 export function PnlValue({
   value,
   className,
   sign = true,
   decimals = 2,
+  currency,
 }: {
   value: number
   className?: string
   sign?: boolean
   decimals?: number
+  currency?: string | null
 }) {
   const tone = pnlTone(value)
   return (
@@ -101,7 +103,7 @@ export function PnlValue({
         className
       )}
     >
-      {fmtMoney(value, { sign, decimals })}
+      {fmtMoney(value, { sign, decimals, currency })}
     </span>
   )
 }

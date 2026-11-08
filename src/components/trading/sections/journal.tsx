@@ -7,7 +7,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { ChevronRight, Download, Loader2, RefreshCw, Search } from 'lucide-react'
 import type { AnalyticsData, JournalTrade, RangeKey } from '@/lib/types'
 import { TRADE_EMOTIONS, TRADE_MISTAKES } from '@/lib/types'
-import { fetchJournal, updateTrade } from '@/lib/api-client'
+import { fetchJournal, fetchStrategies, updateTrade } from '@/lib/api-client'
 import { fmtDateTime, fmtDuration, fmtNum, pnlTone } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -117,12 +117,20 @@ type StatusKey = '' | 'OPEN' | 'CLOSED'
 export function JournalSection({ data }: { data: AnalyticsData }) {
   const { toast } = useToast()
   const queryClient = useQueryClient()
+  const currency = data.account.currency
+
+  // Strategy library for the filter + manual (re-)assignment
+  const { data: stratData } = useQuery({
+    queryKey: ['strategies'],
+    queryFn: () => fetchStrategies(),
+  })
 
   // Local filter state
   const [range, setRange] = useState<RangeKey>('30d')
   const [symbol, setSymbol] = useState('')
   const [result, setResult] = useState<ResultKey>('')
   const [status, setStatus] = useState<StatusKey>('CLOSED')
+  const [strategyId, setStrategyId] = useState('')
   const [q, setQ] = useState('')
 
   const filters = useMemo(
@@ -131,9 +139,11 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
       symbol: symbol || undefined,
       result: (result || undefined) as 'win' | 'loss' | 'be' | undefined,
       status: (status || undefined) as 'OPEN' | 'CLOSED' | undefined,
+      strategyId: strategyId || undefined,
+      accountId: data.account.id,
       q: q || undefined,
     }),
-    [range, symbol, result, status, q]
+    [range, symbol, result, status, strategyId, q, data.account.id]
   )
 
   // keepPreviousData: filter changes keep the current table visible (dimmed)
@@ -153,6 +163,7 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
   const [editMistakes, setEditMistakes] = useState<string[]>([])
   const [editEmotion, setEditEmotion] = useState<string>('')
   const [editNotes, setEditNotes] = useState<string>('')
+  const [editStrategyId, setEditStrategyId] = useState<string>('__none__')
 
   const selectedTrade = trades.find((t) => t.id === selectedId) ?? null
 
@@ -161,6 +172,7 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
     setEditMistakes([...t.mistakes])
     setEditEmotion(t.emotion ?? '')
     setEditNotes(t.notes ?? '')
+    setEditStrategyId(t.strategyId ?? '__none__')
   }
 
   // Save mutation
@@ -170,6 +182,7 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
     onSuccess: () => {
       toast({ title: 'Trade updated' })
       queryClient.invalidateQueries({ queryKey: ['journal'] })
+      queryClient.invalidateQueries({ queryKey: ['strategies'] })
       setSelectedId(null)
     },
     onError: (err: Error) => {
@@ -185,6 +198,7 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
         mistakes: editMistakes,
         emotion: editEmotion || null,
         notes: editNotes || null,
+        strategyId: editStrategyId === '__none__' ? null : editStrategyId,
       },
     })
   }
@@ -193,10 +207,10 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
   function exportCsv() {
     if (trades.length === 0) return
     const headers = [
-      'Position ID', 'Symbol', 'Direction', 'Volume', 'Open Time', 'Close Time',
-      'Open Price', 'Close Price', 'Stop Loss', 'Take Profit', 'Commission', 'Swap',
-      'Profit', 'Net P/L', 'Pips', 'R Multiple', 'Duration (min)', 'Status',
-      'Mistakes', 'Emotion', 'Notes',
+      'Position Ticket', 'Position ID (legacy)', 'Symbol', 'Direction', 'Volume', 'Open Time', 'Close Time',
+      'Open Price', 'Close Price', 'Stop Loss', 'Take Profit', 'Initial SL', 'Risk Amount', 'Commission', 'Swap',
+      'Profit', 'Net P/L', 'Pips', 'R Multiple', 'Duration (min)', 'Status', 'Incomplete History',
+      'Magic', 'Strategy', 'MT5 Comment', 'Mistakes', 'Emotion', 'Notes',
     ]
     const esc = (v: unknown) => {
       const s = v === null || v === undefined ? '' : String(v)
@@ -204,10 +218,12 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
     }
     const rows = trades.map((t) =>
       [
-        t.positionId, t.symbol, t.direction, t.volume, t.openTime, t.closeTime ?? '',
+        t.positionTicket ?? '', t.positionId ?? '', t.symbol, t.direction, t.volume, t.openTime, t.closeTime ?? '',
         t.openPrice, t.closePrice ?? '', t.stopLoss ?? '', t.takeProfit ?? '',
-        t.commission, t.swap, t.profit, t.netProfit, t.pips ?? '', t.rMultiple ?? '',
-        t.holdingMinutes ?? '', t.status, t.mistakes.join('; '), t.emotion ?? '', t.notes ?? '',
+        t.initialStopLoss ?? '', t.riskAmount ?? '', t.commission, t.swap, t.profit, t.netProfit,
+        t.pips ?? '', t.rMultiple ?? '', t.holdingMinutes ?? '', t.status,
+        t.incompleteHistory ? 'yes' : 'no', t.magicNumber ?? '', t.strategyName ?? '', t.mt5Comment ?? '',
+        t.mistakes.join('; '), t.emotion ?? '', t.notes ?? '',
       ]
         .map(esc)
         .join(',')
@@ -259,6 +275,12 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
           ]}
           onChange={(v) => setStatus(v as StatusKey)}
         />
+        <DimensionFilter
+          label="Strategy"
+          value={strategyId}
+          options={(stratData?.strategies ?? []).map((s) => ({ value: s.id, label: s.name }))}
+          onChange={setStrategyId}
+        />
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden />
           <Input
@@ -279,11 +301,11 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
         </span>
         <span className="inline-flex h-8 items-center gap-2 rounded-lg border border-border/70 bg-muted/30 px-3 text-xs">
           <span className="text-muted-foreground">Commission (filtered)</span>
-          <PnlValue value={commissionSum} sign={false} className="text-sm font-semibold" />
+          <PnlValue value={commissionSum} sign={false} className="text-sm font-semibold" currency={currency} />
         </span>
         <span className="inline-flex h-8 items-center gap-2 rounded-lg border border-border/70 bg-muted/30 px-3 text-xs">
           <span className="text-muted-foreground">Net P/L (filtered)</span>
-          <PnlValue value={netSum} className="text-sm font-semibold" />
+          <PnlValue value={netSum} className="text-sm font-semibold" currency={currency} />
         </span>
       </div>
 
@@ -344,6 +366,7 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
                 <TableRow>
                   <TableHead className="text-xs">#</TableHead>
                   <TableHead className="text-xs">Symbol</TableHead>
+                  <TableHead className="text-xs">Strategy</TableHead>
                   <TableHead className="text-xs">Volume</TableHead>
                   <TableHead className="text-xs">Open Time</TableHead>
                   <TableHead className="text-xs">Duration</TableHead>
@@ -367,7 +390,7 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
                       <TableRow
                         key={t.id}
                         tabIndex={0}
-                        aria-label={`Open trade ${t.symbol} #${t.positionId}`}
+                        aria-label={`Open trade ${t.symbol} #${t.positionTicket ?? t.positionId ?? ''}`}
                         onClick={() => openTrade(t)}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' || e.key === ' ') {
@@ -377,12 +400,31 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
                         }}
                         className="cursor-pointer"
                       >
-                        <TableCell className="num text-xs text-muted-foreground">{t.positionId}</TableCell>
+                        <TableCell className="num text-xs text-muted-foreground" title={t.dealTicket ? `deal ${t.dealTicket}` : undefined}>
+                          {t.positionTicket ?? t.positionId ?? '—'}
+                        </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1.5">
                             <span className="text-xs font-semibold">{t.symbol}</span>
                             <DirectionBadge direction={t.direction} />
+                            {t.incompleteHistory && (
+                              <span
+                                className="rounded bg-[var(--warn)]/12 px-1 py-px text-[9px] font-semibold text-[var(--warn)]"
+                                title="Entry data older than the sync window — open time/price are best-effort"
+                              >
+                                INCOMPLETE
+                              </span>
+                            )}
                           </div>
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          {t.strategyName ? (
+                            <span className="inline-flex max-w-[110px] items-center rounded bg-muted/40 px-1.5 py-0.5 text-[10px]" title={t.strategyName}>
+                              <span className="truncate">{t.strategyName}</span>
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground">—</span>
+                          )}
                         </TableCell>
                         <TableCell className="num text-xs">{fmtNum(t.volume, 2)}</TableCell>
                         <TableCell className="text-xs text-muted-foreground">{fmtDateTime(t.openTime)}</TableCell>
@@ -397,10 +439,10 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
                           )}
                         </TableCell>
                         <TableCell className="num text-xs text-muted-foreground">
-                          <PnlValue value={t.commission} sign={false} className="text-xs" />
+                          <PnlValue value={t.commission} sign={false} className="text-xs" currency={currency} />
                         </TableCell>
                         <TableCell className="text-right">
-                          <PnlValue value={t.netProfit} className="text-xs font-semibold" />
+                          <PnlValue value={t.netProfit} className="text-xs font-semibold" currency={currency} />
                         </TableCell>
                         <TableCell>
                           <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/60" aria-hidden />
@@ -429,28 +471,18 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
                 <DialogTitle className="flex flex-wrap items-center gap-2 text-base">
                   {selectedTrade.symbol}
                   <DirectionBadge direction={selectedTrade.direction} />
-                  <span className="num text-sm text-muted-foreground">· #{selectedTrade.positionId}</span>
+                  <span className="num text-sm text-muted-foreground">· #{selectedTrade.positionTicket ?? selectedTrade.positionId ?? '—'}</span>
                 </DialogTitle>
                 <DialogDescription>Review and edit the journal record for this trade.</DialogDescription>
               </DialogHeader>
 
               {/* Facts grid */}
               <div className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
-                <KV label="Open Time">{fmtDateTime(selectedTrade.openTime)}</KV>
-                <KV label="Close Time">{fmtDateTime(selectedTrade.closeTime)}</KV>
-                <KV label="Open Price"><span className="num">{fmtPrice(selectedTrade.openPrice)}</span></KV>
-                <KV label="Close Price"><span className="num">{fmtPrice(selectedTrade.closePrice)}</span></KV>
-                <KV label="Stop Loss"><span className="num">{fmtPrice(selectedTrade.stopLoss)}</span></KV>
-                <KV label="Take Profit"><span className="num">{fmtPrice(selectedTrade.takeProfit)}</span></KV>
-                <KV label="Volume"><span className="num">{fmtNum(selectedTrade.volume, 2)}</span></KV>
-                <KV label="Duration"><span className="num">{fmtDuration(selectedTrade.holdingMinutes)}</span></KV>
-                <KV label="Commission"><PnlValue value={selectedTrade.commission} sign={false} className="text-xs" /></KV>
-                <KV label="Swap"><PnlValue value={selectedTrade.swap} className="text-xs" /></KV>
-                <KV label="Profit"><PnlValue value={selectedTrade.profit} className="text-xs font-semibold" /></KV>
-                <KV label="R Multiple">
-                  <span className="num">
-                    {selectedTrade.rMultiple !== null ? `${fmtNum(selectedTrade.rMultiple, 2)}R` : '—'}
-                  </span>
+                <KV label="Position Ticket">
+                  <span className="num">{selectedTrade.positionTicket ?? selectedTrade.positionId ?? '—'}</span>
+                  {selectedTrade.dealTicket && (
+                    <span className="num ml-1.5 text-[10px] text-muted-foreground">deal {selectedTrade.dealTicket}</span>
+                  )}
                 </KV>
                 <KV label="Status">
                   {selectedTrade.status === 'OPEN' ? (
@@ -458,9 +490,36 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
                   ) : (
                     <Badge variant="secondary">CLOSED</Badge>
                   )}
+                  {selectedTrade.incompleteHistory && (
+                    <Badge className="ml-1.5 border-transparent bg-[var(--warn)]/15 text-[var(--warn)]" title="Entry data older than the sync window">
+                      INCOMPLETE HISTORY
+                    </Badge>
+                  )}
+                </KV>
+                <KV label="Open Time">{fmtDateTime(selectedTrade.openTime)}</KV>
+                <KV label="Close Time">{fmtDateTime(selectedTrade.closeTime)}</KV>
+                <KV label="Open Price"><span className="num">{fmtPrice(selectedTrade.openPrice)}</span></KV>
+                <KV label="Close Price"><span className="num">{fmtPrice(selectedTrade.closePrice)}</span></KV>
+                <KV label="Stop Loss"><span className="num">{fmtPrice(selectedTrade.stopLoss)}</span></KV>
+                <KV label="Take Profit"><span className="num">{fmtPrice(selectedTrade.takeProfit)}</span></KV>
+                <KV label="Initial SL (entry)"><span className="num">{fmtPrice(selectedTrade.initialStopLoss)}</span></KV>
+                <KV label="Initial Risk">
+                  <PnlValue value={selectedTrade.riskAmount ?? 0} sign={false} className="text-xs" currency={currency} />
+                </KV>
+                <KV label="Volume"><span className="num">{fmtNum(selectedTrade.volume, 2)}</span></KV>
+                <KV label="Duration"><span className="num">{fmtDuration(selectedTrade.holdingMinutes)}</span></KV>
+                <KV label="Magic"><span className="num">{selectedTrade.magicNumber ?? '—'}</span></KV>
+                {selectedTrade.mt5Comment && <KV label="MT5 Comment">{selectedTrade.mt5Comment}</KV>}
+                <KV label="Commission"><PnlValue value={selectedTrade.commission} sign={false} className="text-xs" currency={currency} /></KV>
+                <KV label="Swap"><PnlValue value={selectedTrade.swap} className="text-xs" currency={currency} /></KV>
+                <KV label="Profit"><PnlValue value={selectedTrade.profit} className="text-xs font-semibold" currency={currency} /></KV>
+                <KV label="R Multiple">
+                  <span className="num" title={selectedTrade.riskAmount === null ? 'no valid initial risk — R is not computed' : undefined}>
+                    {selectedTrade.rMultiple !== null ? `${fmtNum(selectedTrade.rMultiple, 2)}R` : '—'}
+                  </span>
                 </KV>
                 <KV label="Net P/L" className="border-b-0 sm:col-span-2">
-                  <PnlValue value={selectedTrade.netProfit} className="text-lg font-bold" />
+                  <PnlValue value={selectedTrade.netProfit} className="text-lg font-bold" currency={currency} />
                 </KV>
               </div>
 
@@ -500,6 +559,24 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
                       <SelectItem value="__none__">—</SelectItem>
                       {TRADE_EMOTIONS.map((e) => (
                         <SelectItem key={e} value={e}>{e}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <EditorLabel hint="overrides the magic-number mapping">Strategy</EditorLabel>
+                  <Select
+                    value={editStrategyId}
+                    onValueChange={setEditStrategyId}
+                  >
+                    <SelectTrigger className="h-8 w-full text-xs" aria-label="Strategy">
+                      <SelectValue placeholder="Select strategy" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">— Unassigned —</SelectItem>
+                      {(stratData?.strategies ?? []).map((s) => (
+                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>

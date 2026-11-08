@@ -22,7 +22,7 @@ import {
   TrendingUp,
 } from 'lucide-react'
 import type { AnalyticsData, MatrixCell } from '@/lib/types'
-import { fmtHour, fmtMoney, fmtSigned, heatColor } from '@/lib/format'
+import { fmtCompact, fmtHour, fmtMoney, fmtSigned, heatColor } from '@/lib/format'
 import { Card, CardContent } from '@/components/ui/card'
 import {
   CHART,
@@ -35,17 +35,13 @@ import {
 /** Tehran week order — row index matches analytics matrix day (0 = Saturday) */
 const DAY_SHORT = ['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri']
 
-/** Compact axis money: $1.2k / -$840 */
-function compactMoney(v: number): string {
-  const abs = Math.abs(v)
-  if (abs >= 1000) return `${v < 0 ? '-' : ''}$${(abs / 1000).toFixed(abs >= 10000 ? 0 : 1)}k`
-  return `${v < 0 ? '-' : ''}$${Math.round(abs)}`
-}
-
 const CURSOR = { fill: 'oklch(1 0 0 / 4%)' }
 
 export function TimeSection({ data }: { data: AnalyticsData }) {
   const time = data.time
+  const currency = data.account.currency
+  const money = (n: number | null | undefined, opts?: { sign?: boolean; decimals?: number }) =>
+    fmtMoney(n, { ...opts, currency })
 
   // ── Heatmap lookups (cells exist only where trades occurred) ──
   const matrixMap = new Map<string, MatrixCell>()
@@ -147,7 +143,7 @@ export function TimeSection({ data }: { data: AnalyticsData }) {
                       key={`${d}-${h}`}
                       title={
                         cell
-                          ? `${dayName} ${fmtHour(h)} · ${fmtMoney(cell.pnl, { sign: true })} · ${cell.trades} trades`
+                          ? `${dayName} ${fmtHour(h)} · ${money(cell.pnl, { sign: true })} · ${cell.trades} trades`
                           : `${dayName} ${fmtHour(h)} · no trades`
                       }
                       className={
@@ -167,7 +163,7 @@ export function TimeSection({ data }: { data: AnalyticsData }) {
         {/* legend: neg → muted → pos */}
         <div className="mt-3 flex items-center gap-2">
           <span className="num text-[10px] text-muted-foreground">
-            {fmtMoney(-maxAbs, { sign: true })}
+            {money(-maxAbs, { sign: true })}
           </span>
           <div
             className="h-1.5 flex-1 rounded-full"
@@ -177,7 +173,7 @@ export function TimeSection({ data }: { data: AnalyticsData }) {
             aria-hidden
           />
           <span className="num text-[10px] text-muted-foreground">
-            {fmtMoney(maxAbs, { sign: true })}
+            {money(maxAbs, { sign: true })}
           </span>
         </div>
       </Panel>
@@ -200,7 +196,7 @@ export function TimeSection({ data }: { data: AnalyticsData }) {
                 tickLine={false}
               />
               <YAxis
-                tickFormatter={compactMoney}
+                tickFormatter={(v: number) => fmtCompact(v, data.account.currency)}
                 width={48}
                 axisLine={false}
                 tickLine={false}
@@ -208,7 +204,7 @@ export function TimeSection({ data }: { data: AnalyticsData }) {
               <Tooltip
                 {...CHART.tooltip}
                 cursor={CURSOR}
-                formatter={(v) => fmtMoney(Number(v))}
+                formatter={(v) => money(Number(v))}
                 labelFormatter={(h) => `${fmtHour(Number(h))} Tehran`}
               />
               <Bar dataKey="pnl" radius={[3, 3, 0, 0]} maxBarSize={22}>
@@ -255,7 +251,7 @@ export function TimeSection({ data }: { data: AnalyticsData }) {
               tickLine={false}
             />
             <YAxis
-              tickFormatter={compactMoney}
+              tickFormatter={(v: number) => fmtCompact(v, data.account.currency)}
               width={48}
               axisLine={false}
               tickLine={false}
@@ -263,7 +259,7 @@ export function TimeSection({ data }: { data: AnalyticsData }) {
             <Tooltip
               {...CHART.tooltip}
               cursor={CURSOR}
-              formatter={(v) => fmtMoney(Number(v))}
+              formatter={(v) => money(Number(v))}
               labelFormatter={(n) => `${n} (Tehran week)`}
             />
             <Bar dataKey="pnl" radius={[3, 3, 0, 0]} maxBarSize={36}>

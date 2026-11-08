@@ -47,17 +47,18 @@ Built with Next.js 16 · TypeScript · Prisma · SQLite · Electron
 | 🔤 **Symbol Analytics — تحلیل نمادها** | عملکرد هر نماد به‌تفکیک خرید/فروش با فیلتر و مرتب‌سازی |
 | 🛡 **Risk Analytics — تحلیل ریسک** | توزیع R-Multiple، نسبت ریسک به ریوارد، تحلیل حجم لات، سری‌های برد/باخت |
 | 📓 **Trading Journal — ژورنال معاملاتی** | تاریخچهٔ کامل متاتریدر: کمیسیون، سوآپ، سود خالص + یادداشت، اشتباهات و وضعیت روانی برای هر معامله؛ خروجی CSV |
-| ⚙️ **Settings — تنظیمات** | اتصال MT5، بازهٔ همگام‌سازی، تولید دادهٔ نمونه، مدیریت پایگاه داده، **دانلود فایل نصبی ویندوز** |
+| 🎯 **Strategies — استراتژی‌ها** | کتابخانهٔ استراتژی، نگاشت Magic Number، تخصیص دستی، فیلتر و مقایسهٔ عملکرد (Win Rate، PF، Expectancy، Avg R، Max DD) |
+| ⚙️ **Settings — تنظیمات** | اتصال MT5، منطقهٔ زمانی روز معاملاتی، تولید دادهٔ نمونه، مدیریت پایگاه داده، **دانلود فایل نصبی ویندوز** |
 
 <div align="center">
 <table>
 <tr>
 <td><img src="docs/screenshots/performance.png" alt="Performance" width="100%" /></td>
-<td><img src="docs/screenshots/symbols.png" alt="Symbol Analytics" width="100%" /></td>
+<td><img src="docs/screenshots/strategies.png" alt="Strategies" width="100%" /></td>
 </tr>
 <tr>
 <td><sub>تحلیل عملکرد — منحنی اکوییتی و آمار کامل</sub></td>
-<td><sub>تحلیل نمادها — عملکرد به‌تفکیک نماد</sub></td>
+<td><sub>استراتژی‌ها — نگاشت Magic Number و مقایسهٔ عملکرد</sub></td>
 </tr>
 </table>
 </div>
@@ -82,8 +83,8 @@ Built with Next.js 16 · TypeScript · Prisma · SQLite · Electron
 
 - شِل دسکتاپ: **Electron** — پنجرهٔ نیتیو دور داشبورد (`desktop-build/main.js`)
 - سرور Next.js به‌صورت **standalone** داخل بسته قرار می‌گیرد و فقط روی `127.0.0.1:3517` گوش می‌دهد
-- کانکتور پایتون با **PyInstaller** به یک `exe` مستقل تبدیل می‌شود — نیازی به نصب پایتون نیست
-- نصاب: **NSIS** (`desktop-build/installer.nsi`) — شورتکات استارت‌منو و دسکتاپ، حذف تمیز با پرس‌وجوی حفظ داده‌ها
+- کانکتور پایتون به‌صورت **Python 3.12 embeddable + پکیج MetaTrader5** داخل بسته قرار می‌گیرد — نیازی به نصب پایتون نیست
+- نصاب: **NSIS** (`desktop-build/installer.nsi`) — شورتکات استارت‌منو و دسکتاپ؛ Uninstall به‌صورت پیش‌فرض اطلاعات معاملاتی را در `%APPDATA%\TradingIntelligence` نگه می‌دارد و حذف کامل فقط با تأیید صریح انجام می‌شود
 - اسکریپت‌های آماده‌سازی: `desktop-build/` (ساخت آیکون‌ها، بستهٔ اپ، تنظیمات NSIS)
 
 </details>
@@ -104,7 +105,7 @@ Built with Next.js 16 · TypeScript · Prisma · SQLite · Electron
 - نسخه، حجم دقیق، تاریخ ساخت و **SHA-256** فایل (با دکمهٔ کپی) نمایش داده می‌شود
 - اگر فایل نصاب روی آن نصب موجود نباشد، به‌صورت خودکار به
   [GitHub Releases](https://github.com/realmohamarezaa-netizen/personal-trading-intelligence/releases/latest) هدایت می‌شوید
-- برای ساخت مجدد نصاب با آخرین کد: `bun run build` و سپس `bash desktop-build/build-installer.sh <version>`
+- برای ساخت مجدد نصاب با آخرین کد: `NEXT_DIST_DIR=.next-desktop npm run build` و سپس `NEXT_DIST_DIR=.next-desktop bash desktop-build/build-installer.sh` (نسخه از `src/lib/app-info.ts` خوانده می‌شود)
 
 ---
 
@@ -130,12 +131,22 @@ npm install          # یا: bun install
 cp .env.example .env # در ویندوز: copy .env.example .env
 
 # 3) پایگاه داده
-npm run db:push      # ساخت جداول SQLite
-npm run seed         # بارگذاری ۲۴۰ معاملهٔ نمونه (اختیاری)
+npm run db:push      # ساخت جداول SQLite (بدون --accept-data-loss)
+npm run seed         # بارگذاری دادهٔ نمونه (اختیاری)
 
 # 4) اجرا
-npm run dev          # → http://localhost:3000
+npm run dev          # → http://localhost:3000  (کراس-پلتفرم، بدون شرل خاص)
+npm start            # اجرای production (node خالص، بدون Bun) — فقط 127.0.0.1
+npm run typecheck    # بررسی TypeScript
+npm test             # تست‌های موتور محاسباتی + دیتابیس + امنیت (bun test)
+npm run test:python  # تست‌های کانکتور MT5 با fixture (بدون ترمینال واقعی)
 ```
+
+### مهاجرت و محل دیتابیس (v1.3.0)
+
+- **نسخهٔ دسکتاپ:** دیتابیس در `%APPDATA%\TradingIntelligence\data\custom.db` قرار دارد — بیرون از پوشهٔ برنامه. نصب مجدد، آپدیت و حذف برنامه هرگز به آن دست نمی‌زند؛ حذف کامل فقط با تأیید صریح در Uninstaller.
+- **دیتابیس قدیمی (v1.2.x داخل پوشهٔ برنامه):** در اولین اجرای نسخهٔ جدید به‌صورت اتمیک (کپی → راستی‌آزمایی → بکاپ → rename) به مسیر جدید منتقل و اسکیمای جدید روی آن اعمال می‌شود (`src/lib/db-bootstrap.ts`).
+- **نسخهٔ توسعه:** `db/custom.db` همان‌طور که بود می‌ماند؛ `npm run db:bootstrap` مهاجرت‌های guarded را اعمال می‌کند.
 
 ### کانکتور MT5 (فقط ویندوز)
 

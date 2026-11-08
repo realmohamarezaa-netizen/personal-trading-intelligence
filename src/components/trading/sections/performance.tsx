@@ -74,6 +74,9 @@ export function PerformanceSection({
   onSymbol: (s: string) => void
 }) {
   const perf = data.performance
+  const currency = data.account.currency
+  const money = (n: number | null | undefined, opts?: { sign?: boolean; decimals?: number }) =>
+    fmtMoney(n, { ...opts, currency })
   const rf = perf.recoveryFactor
 
   // ── Hero stat band (12 KPIs) ──
@@ -100,41 +103,46 @@ export function PerformanceSection({
     {
       label: 'Profit Factor',
       value: fmtPF(perf.profitFactor),
-      tone: perf.profitFactor >= 1.3 ? 'pos' : perf.profitFactor < 1 ? 'warn' : 'neutral',
+      tone: (perf.profitFactor ?? 1) >= 1.3 ? 'pos' : (perf.profitFactor ?? 1) < 1 ? 'warn' : 'neutral',
       sub: <>gross win ÷ gross loss</>,
       icon: <Scale className="h-4 w-4" />,
     },
     {
       label: 'Expectancy',
-      value: fmtMoney(perf.expectancy, { sign: true }),
+      value: money(perf.expectancy, { sign: true }),
       tone: perf.expectancy > 0 ? 'pos' : perf.expectancy < 0 ? 'neg' : 'neutral',
-      sub: perf.expectancyR !== null ? <span className="num">{fmtNum(perf.expectancyR)}R per trade</span> : <>—</>,
+      sub:
+        perf.expectancyR !== null ? (
+          <span className="num">{fmtNum(perf.expectancyR)}R per trade</span>
+        ) : (
+          <>avg net per trade (incl. BE)</>
+        ),
       icon: <Sigma className="h-4 w-4" />,
     },
     {
       label: 'Avg Win',
-      value: fmtMoney(perf.avgWin),
+      value: money(perf.avgWin),
       tone: 'pos',
       sub: <>per winning trade</>,
       icon: <TrendingUp className="h-4 w-4" />,
     },
     {
       label: 'Avg Loss',
-      value: fmtMoney(perf.avgLoss),
+      value: money(perf.avgLoss),
       tone: 'neg',
       sub: <>per losing trade</>,
       icon: <TrendingDown className="h-4 w-4" />,
     },
     {
       label: 'Largest Win',
-      value: fmtMoney(perf.largestWin, { sign: true }),
+      value: money(perf.largestWin, { sign: true }),
       tone: 'pos',
       sub: <>single best</>,
       icon: <ArrowUpRight className="h-4 w-4" />,
     },
     {
       label: 'Largest Loss',
-      value: fmtMoney(perf.largestLoss),
+      value: money(perf.largestLoss),
       tone: 'neg',
       sub: <>single worst</>,
       icon: <ArrowDownRight className="h-4 w-4" />,
@@ -143,7 +151,7 @@ export function PerformanceSection({
       label: 'Recovery Factor',
       value: rf === null ? '—' : fmtNum(rf),
       tone: rf === null ? 'neutral' : rf > 0 ? 'pos' : rf < 0 ? 'neg' : 'neutral',
-      sub: <>net profit ÷ max DD</>,
+      sub: <>range net P/L ÷ same-window max DD</>,
       icon: <Activity className="h-4 w-4" />,
     },
     {
@@ -157,7 +165,11 @@ export function PerformanceSection({
       value: perf.avgR === null ? '—' : `${fmtNum(perf.avgR)}R`,
       tone:
         perf.avgR === null ? 'neutral' : perf.avgR > 0 ? 'pos' : perf.avgR < 0 ? 'neg' : 'neutral',
-      sub: <>risk multiples</>,
+      sub: (
+        <>
+          R coverage {fmtPct(perf.rCoverage)} ({perf.rValidCount}/{perf.totalTrades})
+        </>
+      ),
       icon: <Repeat className="h-4 w-4" />,
     },
     {
@@ -267,7 +279,7 @@ export function PerformanceSection({
                           <div className="num font-semibold">{Number(value)} trades</div>
                           {b && (
                             <div className="num opacity-70">
-                              net {fmtMoney(b.pnl, { sign: true })}
+                              net {money(b.pnl, { sign: true })}
                             </div>
                           )}
                         </div>
@@ -318,7 +330,7 @@ export function PerformanceSection({
                           <div className="num font-semibold">{Number(value)} trades</div>
                           {b && (
                             <div className="num opacity-70">
-                              net {fmtMoney(b.pnl, { sign: true })}
+                              net {money(b.pnl, { sign: true })}
                             </div>
                           )}
                         </div>
@@ -341,16 +353,16 @@ export function PerformanceSection({
           <div className="grid gap-4 lg:grid-cols-3">
             <Panel title="P/L Composition" description="تفکیک سود و هزینه‌ها">
               <div className="space-y-2.5">
-                <CompRow label="Gross Profit" value={fmtMoney(perf.grossProfit)} cls="pnl-pos" />
-                <CompRow label="Gross Loss" value={fmtMoney(-perf.grossLoss)} cls="pnl-neg" />
+                <CompRow label="Gross Profit" value={money(perf.grossProfit)} cls="pnl-pos" />
+                <CompRow label="Gross Loss" value={money(-perf.grossLoss)} cls="pnl-neg" />
                 <CompRow
                   label="Commission"
-                  value={fmtMoney(perf.totalCommission)}
+                  value={money(perf.totalCommission)}
                   cls="text-muted-foreground"
                 />
                 <CompRow
                   label="Swap"
-                  value={fmtMoney(perf.totalSwap)}
+                  value={money(perf.totalSwap)}
                   cls="text-muted-foreground"
                 />
                 <div className="flex items-center justify-between gap-3 border-t border-border/60 pt-3">
@@ -382,7 +394,7 @@ export function PerformanceSection({
                   <div className="min-w-0">
                     <div className="text-[11px] text-muted-foreground">Best trade</div>
                     <div className="num pnl-pos text-sm font-semibold">
-                      {fmtMoney(perf.largestWin, { sign: true })}
+                      {money(perf.largestWin, { sign: true })}
                     </div>
                   </div>
                 </div>
@@ -393,7 +405,7 @@ export function PerformanceSection({
                   <div className="min-w-0">
                     <div className="text-[11px] text-muted-foreground">Worst trade</div>
                     <div className="num pnl-neg text-sm font-semibold">
-                      {fmtMoney(perf.largestLoss)}
+                      {money(perf.largestLoss)}
                     </div>
                   </div>
                 </div>

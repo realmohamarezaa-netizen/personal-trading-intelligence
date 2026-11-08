@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { spawn } from 'child_process'
 import fs from 'fs'
 import path from 'path'
+import { randomBytes } from 'crypto'
 import { db } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
@@ -9,15 +10,18 @@ export const dynamic = 'force-dynamic'
 // ─── Launch the bundled MT5 sync service (desktop build only) ────────────────
 // The Windows desktop build ships an embedded Python runtime plus the
 // MetaTrader5 package. The Electron main process sets PTI_PYTHON /
-// PTI_SYNC_SCRIPT / PTI_LOG_DIR before starting the Next.js server.
-// When those are absent (web / sandbox / plain dev), we answer with a clear
-// NOT_BUNDLED error so the UI can fall back to the manual connector guide.
+// PTI_SYNC_SCRIPT / PTI_LOG_DIR / PTI_TOKEN_FILE before starting the Next.js
+// server. When those are absent (web / sandbox / plain dev), we answer with a
+// clear NOT_BUNDLED error so the UI can fall back to the manual connector guide.
+//
+// Each launch mints a random sync token: it is handed to the Python connector
+// (--token) and stored in PTI_TOKEN_FILE, where /api/mt5/sync expects it
+// (X-PTI-Token header). Other local processes cannot push fake trades.
 //
 // First launch removes the generated demo dataset and creates a placeholder
 // "mt5" account shell, so the dashboard switches cleanly from DEMO DATA to
-// the user's real account. The shell also guarantees SyncLog rows always
-// have a valid account (FK) and stops the demo auto-seed from re-generating
-// sample data while the first real import is still running.
+// the user's real account. The shell is later adopted by the first real sync
+// (see src/lib/mt5-sync.ts → resolveAccount) so pre-upgrade rows stay attached.
 //
 // Read-only: the connector can never place, modify or close any order.
 
@@ -70,12 +74,12 @@ export async function POST(_req: NextRequest) {
 
     // First real connection: drop the generated demo dataset so the dashboard
     // switches from DEMO DATA to the user's real account without leftovers,
-    // then make sure an account row always exists (shell is updated by the
+    // then make sure an account row always exists (shell is adopted by the
     // first real sync with the actual MT5 account info).
     let wipedDemo = false
     const demoAccount = await db.account.findUnique({ where: { id: 'demo' } })
     if (demoAccount) {
-      await db.account.delete({ where: { id: 'demo' } }) // cascades trades, snapshots, cashflows
+      await db.account.delete({ where: { id: 'demo' } }) // cascades demo trades, snapshots, cashflows
       wipedDemo = true
     }
 
@@ -92,6 +96,18 @@ export async function POST(_req: NextRequest) {
       })
     }
 
+    // ── mint a fresh sync token for this connector session ─────────────────
+    const token = randomBytes(24).toString('hex')
+    const tokenFile = process.env.PTI_TOKEN_FILE
+    if (tokenFile) {
+      try {
+        fs.mkdirSync(path.dirname(tokenFile), { recursive: true })
+        fs.writeFileSync(tokenFile, token + '\n', { encoding: 'utf8' })
+      } catch (err) {
+        console.error('[api/mt5/launch] could not persist sync token', err)
+      }
+    }
+
     const logDir = process.env.PTI_LOG_DIR ?? path.join(process.cwd(), 'logs')
     fs.mkdirSync(logDir, { recursive: true })
     const out = fs.openSync(path.join(logDir, 'mt5-sync.log'), 'a')
@@ -100,7 +116,13 @@ export async function POST(_req: NextRequest) {
     try {
       child = spawn(
         pythonExe,
-        [scriptPath, '--api', `http://127.0.0.1:${port}`, '--days', '365', '--interval', '45'],
+        [
+          scriptPath,
+          '--api', `http://127.0.0.1:${port}`,
+          '--days', '365',
+          '--interval', '45',
+          ...(tokenFile ? ['--token', token] : []),
+        ],
         { cwd: path.dirname(scriptPath), stdio: ['ignore', out, out] },
       )
     } catch (spawnErr) {
@@ -135,7 +157,7 @@ export async function POST(_req: NextRequest) {
         accountId: shell.id,
         source: 'DESKTOP_LAUNCH',
         status: 'OK',
-        message: `Bundled connector started (pid ${child.pid ?? '?'}) — syncing every 45s`,
+        message: `Bundled connector started (pid ${child.pid ?? '?'}, token-protected) — syncing every 45s`,
         tradesInserted: 0,
         tradesUpdated: 0,
       },

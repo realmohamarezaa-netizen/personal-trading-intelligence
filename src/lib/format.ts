@@ -1,12 +1,53 @@
 // ─── Formatting helpers (client + server safe) ───────────────────────────────
 
-export function fmtMoney(n: number | null | undefined, opts?: { sign?: boolean; decimals?: number }): string {
+/**
+ * Currency symbol for an ISO code via Intl ("$", "€", "IRR", …).
+ * Falls back to the raw code for unknown currencies.
+ */
+export function currencySymbol(currency?: string | null): string {
+  if (!currency) return '$'
+  try {
+    const parts = new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency,
+      currencyDisplay: 'narrowSymbol',
+      maximumFractionDigits: 0,
+    }).formatToParts(1)
+    const sym = parts.find((p) => p.type === 'currency')?.value
+    return sym || currency
+  } catch {
+    return currency
+  }
+}
+
+/**
+ * Money formatter honoring the account's real currency (P2.7).
+ * Without a currency the legacy "$" default is kept for backward compat.
+ */
+export function fmtMoney(
+  n: number | null | undefined,
+  opts?: { sign?: boolean; decimals?: number; currency?: string | null }
+): string {
   if (n === null || n === undefined || !isFinite(n)) return '—'
   const d = opts?.decimals ?? 2
   const abs = Math.abs(n)
   const formatted = abs.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
   const sign = n < 0 ? '-' : opts?.sign ? '+' : ''
+  if (opts?.currency) {
+    return `${sign}${currencySymbol(opts.currency)}${formatted}`
+  }
   return `${sign}$${formatted}`
+}
+
+/** Compact axis money: $1.2k / -$840 — with the account's real symbol. */
+export function fmtCompact(n: number | null | undefined, currency?: string | null): string {
+  if (n === null || n === undefined || !isFinite(n)) return '—'
+  const sym = currencySymbol(currency)
+  const sign = n < 0 ? '-' : ''
+  const abs = Math.abs(n)
+  if (abs >= 1_000_000) return `${sign}${sym}${(abs / 1_000_000).toFixed(abs >= 10_000_000 ? 0 : 1)}M`
+  if (abs >= 1_000) return `${sign}${sym}${(abs / 1_000).toFixed(abs >= 10_000 ? 0 : 1)}k`
+  return `${sign}${sym}${Math.round(abs)}`
 }
 
 export function fmtSigned(n: number | null | undefined, decimals = 2): string {

@@ -59,9 +59,10 @@ export async function GET() {
     const accountSynced = Boolean(account && account.id !== 'demo' && account.mt5Login)
     const awaitingFirstSync = Boolean(account && account.id !== 'demo' && !account.mt5Login)
 
-    const [lastSyncLog, lastLaunchLog] = await Promise.all([
+    const [lastSyncLog, lastLaunchLog, snapCount] = await Promise.all([
       db.syncLog.findFirst({ where: { source: 'MT5_SYNC' }, orderBy: { ts: 'desc' } }),
       db.syncLog.findFirst({ where: { source: 'DESKTOP_LAUNCH' }, orderBy: { ts: 'desc' } }),
+      db.equitySnapshot.count().catch(() => 0),
     ])
 
     const shape = (l: { ts: Date; source: string; status: string; message: string } | null): LogLine | null =>
@@ -70,16 +71,37 @@ export async function GET() {
     const logDir = process.env.PTI_LOG_DIR ?? path.join(process.cwd(), 'logs')
     const logFile = path.join(logDir, 'mt5-sync.log')
 
+    // Database diagnostics: where the data lives + how big it is (P5/P0).
+    const dataDir = process.env.PTI_DATA_DIR ?? null
+    let dbFile: string | null = null
+    let dbSizeBytes: number | null = null
+    try {
+      const url = process.env.DATABASE_URL ?? ''
+      if (url.startsWith('file:')) {
+        const p = url.slice('file:'.length)
+        dbFile = p
+        dbSizeBytes = fs.existsSync(p) ? fs.statSync(p).size : null
+      }
+    } catch {}
+
     return NextResponse.json({
       bundled,
       connectorRunning: isRunning(g.__mt5SyncPid),
       connectorPid: g.__mt5SyncPid ?? null,
+      tokenProtected: Boolean(process.env.PTI_SYNC_TOKEN || process.env.PTI_TOKEN_FILE),
       accountSynced,
       awaitingFirstSync,
+      tradeMode: account?.tradeMode ?? null,
       lastSyncLog: shape(lastSyncLog),
       lastLaunchLog: shape(lastLaunchLog),
       logTail: tailFile(logFile),
       logFile,
+      data: {
+        dataDir,
+        dbFile,
+        dbSizeBytes,
+        snapshotCount: snapCount,
+      },
     })
   } catch (err) {
     console.error('[api/mt5/status]', err)

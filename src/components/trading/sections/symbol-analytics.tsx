@@ -17,7 +17,7 @@ import {
 } from 'recharts'
 import type { AnalyticsData, RangeKey, SymbolStat } from '@/lib/types'
 import { cn } from '@/lib/utils'
-import { fmtDuration, fmtMoney, fmtNum, fmtPct, fmtPF } from '@/lib/format'
+import { fmtCompact, fmtDuration, fmtMoney, fmtNum, fmtPct, fmtPF } from '@/lib/format'
 import {
   Card,
   CardContent,
@@ -39,15 +39,9 @@ import {
 } from '@/components/trading/shared/ui'
 import { RangeFilter } from '@/components/trading/shared/filters'
 
-/** Compact axis money: $1.2k / -$840 */
-function compactMoney(v: number): string {
-  const abs = Math.abs(v)
-  if (abs >= 1000) return `${v < 0 ? '-' : ''}$${(abs / 1000).toFixed(abs >= 10000 ? 0 : 1)}k`
-  return `${v < 0 ? '-' : ''}$${Math.round(abs)}`
-}
-
 /** Profit-factor color tone */
-function pfClass(pf: number): string {
+function pfClass(pf: number | null): string {
+  if (pf === null) return 'text-muted-foreground'
   return pf >= 1.5 ? 'pnl-pos' : pf < 1 ? 'pnl-neg' : 'text-muted-foreground'
 }
 
@@ -72,6 +66,9 @@ export function SymbolSection({
   range: RangeKey
   onRange: (r: RangeKey) => void
 }) {
+  const currency = data.account.currency
+  const money = (n: number | null | undefined, opts?: { sign?: boolean; decimals?: number }) =>
+    fmtMoney(n, { ...opts, currency })
   const directions = data.directions
   const totalAbs = directions.reduce((a, d) => a + Math.abs(d.netPnl), 0)
 
@@ -119,8 +116,8 @@ export function SymbolSection({
                     </span>
                   }
                 />
-                <Kv label="Avg Win" value={<span className="num pnl-pos">{fmtMoney(d.avgWin)}</span>} />
-                <Kv label="Avg Loss" value={<span className="num pnl-neg">{fmtMoney(d.avgLoss)}</span>} />
+                <Kv label="Avg Win" value={<span className="num pnl-pos">{money(d.avgWin)}</span>} />
+                <Kv label="Avg Loss" value={<span className="num pnl-neg">{money(d.avgLoss)}</span>} />
                 <Kv
                   label="Avg R"
                   value={<span className="num">{d.avgR === null ? '—' : fmtNum(d.avgR, 2)}</span>}
@@ -153,7 +150,7 @@ export function SymbolSection({
                 aria-hidden
               />
               <span className="font-semibold text-foreground">{d.direction}</span>
-              <span className="num">{fmtMoney(d.netPnl, { sign: true })}</span>
+              <span className="num">{money(d.netPnl, { sign: true })}</span>
               <span className="num">
                 ({totalAbs > 0 ? ((Math.abs(d.netPnl) / totalAbs) * 100).toFixed(0) : '—'}% share)
               </span>
@@ -244,11 +241,11 @@ export function SymbolSection({
                   axisLine={false}
                   tickLine={false}
                 />
-                <YAxis tickFormatter={compactMoney} width={48} axisLine={false} tickLine={false} />
+                <YAxis tickFormatter={(v: number) => fmtCompact(v, data.account.currency)} width={48} axisLine={false} tickLine={false} />
                 <Tooltip
                   {...CHART.tooltip}
                   cursor={CURSOR}
-                  formatter={(v) => fmtMoney(Number(v))}
+                  formatter={(v) => money(Number(v))}
                 />
                 <Bar dataKey="netPnl" radius={[3, 3, 0, 0]} maxBarSize={26}>
                   {byPnl.map((s) => (
@@ -276,11 +273,11 @@ export function SymbolSection({
                   axisLine={false}
                   tickLine={false}
                 />
-                <YAxis tickFormatter={compactMoney} width={48} axisLine={false} tickLine={false} />
+                <YAxis tickFormatter={(v: number) => fmtCompact(v, data.account.currency)} width={48} axisLine={false} tickLine={false} />
                 <Tooltip
                   {...CHART.tooltip}
                   cursor={CURSOR}
-                  formatter={(v) => fmtMoney(Number(v))}
+                  formatter={(v) => money(Number(v))}
                 />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
                 <Bar dataKey="buyPnl" name="Buy P/L" stackId="a" fill={CHART.pos} maxBarSize={26} />

@@ -39,6 +39,12 @@
     ".next-desktop/dev/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "skills",
+    "agent-ctx",
+    "tool-results",
+    "upload",
+    "mini-services",
+    "examples"
   ]
 }

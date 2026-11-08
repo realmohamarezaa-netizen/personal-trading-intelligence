@@ -19,12 +19,15 @@ import {
   AlertTriangle,
   Loader2,
   PlugZap,
+  Target,
 } from 'lucide-react'
 import type { AnalyticsData, RangeKey } from '@/lib/types'
-import { fetchAnalytics, launchMt5Connector } from '@/lib/api-client'
+import { fetchAnalytics, fetchSettings, launchMt5Connector } from '@/lib/api-client'
+import { currencySymbol } from '@/lib/format'
 import { APP_VERSION } from '@/lib/app-info'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
 import { Providers } from './providers'
 import { DashboardSkeleton } from './shared/skeletons'
@@ -34,6 +37,7 @@ import { TimeSection } from './sections/time-analytics'
 import { SymbolSection } from './sections/symbol-analytics'
 import { RiskSection } from './sections/risk-analytics'
 import { JournalSection } from './sections/journal'
+import { StrategiesSection } from './sections/strategies'
 import { SettingsSection } from './sections/settings'
 
 type SectionKey =
@@ -43,6 +47,7 @@ type SectionKey =
   | 'symbol'
   | 'risk'
   | 'journal'
+  | 'strategies'
   | 'settings'
 
 const SECTIONS: { key: SectionKey; label: string; fa: string; icon: typeof Activity }[] = [
@@ -52,6 +57,7 @@ const SECTIONS: { key: SectionKey; label: string; fa: string; icon: typeof Activ
   { key: 'symbol', label: 'Symbol Analytics', fa: 'تحلیل نمادها', icon: Layers },
   { key: 'risk', label: 'Risk Analytics', fa: 'تحلیل ریسک', icon: ShieldAlert },
   { key: 'journal', label: 'Trading Journal', fa: 'ژورنال معاملاتی', icon: NotebookPen },
+  { key: 'strategies', label: 'Strategies', fa: 'استراتژی‌ها', icon: Target },
   { key: 'settings', label: 'Settings', fa: 'تنظیمات', icon: Settings },
 ]
 
@@ -131,18 +137,37 @@ function AppInner() {
   const [section, setSection] = useState<SectionKey>('overview')
   const [range, setRange] = useState<RangeKey>('all')
   const [symbol, setSymbol] = useState('')
+  const [accountId, setAccountId] = useState('')
+  // Custom window (range === 'custom'); defaults cover the last 30 days
+  const [customFrom, setCustomFrom] = useState(() => new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10))
+  const [customTo, setCustomTo] = useState(() => new Date().toISOString().slice(0, 10))
 
   // keepPreviousData: while a new range/symbol is fetched the previous
   // dataset stays on screen (dimmed below) instead of the whole page
   // collapsing into a spinner — switching feels instant, data just updates.
   const { data, isLoading, isError, error, refetch, isRefetching, isPlaceholderData } = useQuery({
-    queryKey: ['analytics', range, symbol],
-    queryFn: () => fetchAnalytics({ range, symbol: symbol || undefined }),
+    queryKey: ['analytics', range, symbol, accountId, customFrom, customTo],
+    queryFn: () =>
+      fetchAnalytics({
+        range,
+        symbol: symbol || undefined,
+        accountId: accountId || undefined,
+        from: range === 'custom' ? customFrom : undefined,
+        to: range === 'custom' ? `${customTo}T23:59:59` : undefined,
+      }),
     placeholderData: keepPreviousData,
   })
 
   const queryClient = useQueryClient()
   const { toast } = useToast()
+
+  // Account list for the sidebar switcher (multi-account: demo/real separate)
+  const { data: accountsData } = useQuery({
+    queryKey: ['settings'],
+    queryFn: () => fetchSettings(),
+    staleTime: 30_000,
+  })
+  const accounts = accountsData?.accounts ?? []
 
   // One-click MT5 connection (bundled connector inside the desktop build).
   const connectMt5 = useMutation({
@@ -235,13 +260,38 @@ function AppInner() {
               <span className="text-[11px] font-semibold">{data?.account.name ?? 'Account'}</span>
               <span className="text-[10px] text-muted-foreground">{data?.account.currency ?? 'USD'}</span>
             </div>
+            {accounts.length > 1 ? (
+              <div className="mt-1.5">
+                <Select
+                  value={accountId || '__active__'}
+                  onValueChange={(v) => {
+                    setAccountId(v === '__active__' ? '' : v)
+                    queryClient.invalidateQueries({ queryKey: ['settings'] })
+                  }}
+                >
+                  <SelectTrigger size="sm" className="h-6 w-full text-[10px]" aria-label="Active account">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__active__" className="text-[11px]">— Most recent sync —</SelectItem>
+                    {accounts.map((a) => (
+                      <SelectItem key={a.id} value={a.id} className="text-[11px]">
+                        {a.name} · {a.tradeMode}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
             <div className="mt-0.5 text-[10px] text-muted-foreground">
               {data ? `${data.account.broker} · ${data.account.server}` : '—'}
             </div>
             <div className="num mt-2 flex items-baseline justify-between">
               <span className="text-[10px] text-muted-foreground">Equity</span>
               <span className="text-sm font-semibold">
-                {data ? `$${data.overview.equity.toLocaleString('en-US', { maximumFractionDigits: 0 })}` : '—'}
+                {data
+                  ? `${currencySymbol(data.account.currency)}${data.overview.equity.toLocaleString('en-US', { maximumFractionDigits: 0 })}`
+                  : '—'}
               </span>
             </div>
           </div>
@@ -355,6 +405,7 @@ function AppInner() {
                   )}
                   {section === 'risk' && <RiskSection data={data} />}
                   {section === 'journal' && <JournalSection data={data} />}
+                  {section === 'strategies' && <StrategiesSection accountId={accountId} />}
                   {section === 'settings' && <SettingsSection />}
                 </motion.div>
               </AnimatePresence>

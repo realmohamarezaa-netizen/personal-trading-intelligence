@@ -22,7 +22,7 @@ import {
 } from 'lucide-react'
 import type { AnalyticsData } from '@/lib/types'
 import { cn } from '@/lib/utils'
-import { fmtDate, fmtDuration, fmtMoney, fmtNum, fmtPct } from '@/lib/format'
+import { currencySymbol, fmtDate, fmtDuration, fmtMoney, fmtNum, fmtPct } from '@/lib/format'
 import { Badge } from '@/components/ui/badge'
 import {
   Table,
@@ -46,8 +46,20 @@ function fmtDays(d: number): string {
 
 export function RiskSection({ data }: { data: AnalyticsData }) {
   const risk = data.risk
+  const currency = data.account.currency
+  const money = (n: number | null | undefined, opts?: { sign?: boolean; decimals?: number }) =>
+    fmtMoney(n, { ...opts, currency })
   const maxVolume = risk.openExposure.reduce((m, o) => Math.max(m, o.volume), 0)
   const inDrawdown = risk.currentDdPct > 0
+
+  const ddBasisLabel =
+    risk.ddBasis === 'equity'
+      ? 'basis: floating equity snapshots (connector sampling)'
+      : 'basis: realized balance curve'
+  const dailyDdBasisLabel =
+    risk.dailyDdBasis === 'equity'
+      ? 'worst intraday equity drop per trading day (account timezone)'
+      : 'worst realized balance drop per trading day — no intraday snapshots in range'
 
   return (
     <motion.div
@@ -58,7 +70,7 @@ export function RiskSection({ data }: { data: AnalyticsData }) {
     >
       <SectionHeader
         title="Risk Analytics"
-        subtitle="ریسک را نمی‌شود حذف کرد، اما می‌شود مهار کرد"
+        subtitle={`ریسک را نمی‌شود حذف کرد، اما می‌شود مهار کرد — ${ddBasisLabel}`}
       />
 
       {/* ── KPI grid ── */}
@@ -66,14 +78,14 @@ export function RiskSection({ data }: { data: AnalyticsData }) {
         <StatCard
           label="Max Equity DD"
           value={fmtPct(risk.maxDdPct)}
-          sub={fmtMoney(-risk.maxDdAbs)}
+          sub={money(-risk.maxDdAbs)}
           tone="neg"
           icon={<ShieldAlert className="h-4 w-4" aria-hidden />}
         />
         <StatCard
           label="Max Daily DD"
           value={fmtPct(risk.maxDailyDdPct)}
-          sub={fmtMoney(-risk.maxDailyDdAbs)}
+          sub={money(-risk.maxDailyDdAbs)}
           tone="neg"
           icon={<CalendarX className="h-4 w-4" aria-hidden />}
         />
@@ -102,8 +114,21 @@ export function RiskSection({ data }: { data: AnalyticsData }) {
         />
       </div>
 
+      {risk.equityMaxDdPct !== null && (
+        <p className="text-[11px] text-muted-foreground">
+          Floating (equity-snapshot) max drawdown in this range:{' '}
+          <span className="num font-semibold text-[var(--neg)]">{fmtPct(risk.equityMaxDdPct, 2)}</span>{' '}
+          ({fmtMoney(-risk.equityMaxDdAbs!, { currency })}) · snapshots used:{' '}
+          <span className="num">{risk.snapshotCount}</span>
+        </p>
+      )}
+      <p className="text-[11px] text-muted-foreground">Daily drawdown — {dailyDdBasisLabel}.</p>
+
       {/* ── Underwater curve ── */}
-      <Panel title="Underwater Curve" description="فاصله حساب از قله سرمایه">
+      <Panel
+        title="Underwater Curve"
+        description={`${risk.ddBasis === 'equity' ? 'Floating equity' : 'Realized balance'} — ${risk.ddBasis === 'equity' ? 'نمونه‌برداری کانکتور (~۴۵ ثانیه)' : 'منحنی تحقق‌یافته'}`}
+      >
         {risk.underwater.length === 0 ? (
           <div className="flex h-[220px] items-center justify-center text-xs text-muted-foreground">
             No equity data in this range
@@ -165,7 +190,7 @@ export function RiskSection({ data }: { data: AnalyticsData }) {
                     <TableHead className="pl-4">Start</TableHead>
                     <TableHead>End</TableHead>
                     <TableHead className="text-right">Depth %</TableHead>
-                    <TableHead className="text-right">Depth $</TableHead>
+                    <TableHead className="text-right">Depth {currencySymbol(currency)}</TableHead>
                     <TableHead className="text-right">Duration</TableHead>
                     <TableHead className="pr-4 text-right">Recovered</TableHead>
                   </TableRow>
@@ -185,7 +210,7 @@ export function RiskSection({ data }: { data: AnalyticsData }) {
                         {fmtPct(p.depthPct, 2)}
                       </TableCell>
                       <TableCell className="text-right text-xs">
-                        <PnlValue value={-p.depthAbs} className="text-xs" />
+                        <PnlValue value={-p.depthAbs} className="text-xs" currency={currency} />
                       </TableCell>
                       <TableCell className="num text-right text-xs">{fmtDays(p.days)}</TableCell>
                       <TableCell className="pr-4 text-right">
@@ -234,13 +259,13 @@ export function RiskSection({ data }: { data: AnalyticsData }) {
                   <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
                     Largest Loss
                   </div>
-                  <PnlValue value={risk.largestLoss} className="text-sm font-semibold" />
+                  <PnlValue value={risk.largestLoss} className="text-sm font-semibold" currency={currency} />
                 </div>
                 <div>
                   <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
                     Largest Win
                   </div>
-                  <PnlValue value={risk.largestWin} className="text-sm font-semibold" />
+                  <PnlValue value={risk.largestWin} className="text-sm font-semibold" currency={currency} />
                 </div>
                 <div className="col-span-2 sm:col-span-1">
                   <div className="text-[10px] uppercase tracking-wider text-muted-foreground">

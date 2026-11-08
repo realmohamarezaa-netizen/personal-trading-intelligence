@@ -11,6 +11,7 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  Line,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -31,11 +32,14 @@ import {
 } from 'lucide-react'
 import type { AnalyticsData, CalendarDay, DailyPnl, EquityPoint, RangeKey } from '@/lib/types'
 import {
+  currencySymbol,
+  fmtCompact,
   fmtDate,
   fmtDateTime,
   fmtDuration,
   fmtMoney,
   fmtMoneyPlain,
+  fmtNum,
   fmtPct,
   fmtPF,
   fmtSigned,
@@ -84,10 +88,6 @@ function shortDay(iso: string): string {
   return SHORT_DAY_FMT.format(new Date(iso))
 }
 
-function compactMoney(v: number): string {
-  return `$${new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(v)}`
-}
-
 /** '2026-05' → 'May 2026' */
 function monthLabel(ym: string): string {
   const [ys, ms] = ym.split('-')
@@ -116,7 +116,23 @@ export function OverviewSection({
   onRange: (r: RangeKey) => void
 }) {
   const o = data.overview
+  const currency = data.account.currency
+  const money = (n: number | null | undefined, opts?: { sign?: boolean; decimals?: number }) =>
+    fmtMoney(n, { ...opts, currency })
   const floatTone = pnlTone(o.floatingPnl)
+
+  // Merge the realized balance curve with the connector's floating equity
+  // samples into one chart dataset (snapshot points may be sparse).
+  const chartRows = useMemo(() => {
+    const map = new Map<string, { t: string; balance?: number; snapshotEquity?: number }>()
+    for (const p of data.equityCurve) map.set(p.t, { t: p.t, balance: p.balance })
+    for (const p of data.equitySeries) {
+      const e = map.get(p.t)
+      if (e) e.snapshotEquity = p.equity
+      else map.set(p.t, { t: p.t, snapshotEquity: p.equity })
+    }
+    return [...map.values()].sort((a, b) => a.t.localeCompare(b.t))
+  }, [data.equityCurve, data.equitySeries])
 
   // ── KPI cards ──
   const kpis: Kpi[] = [
@@ -124,18 +140,18 @@ export function OverviewSection({
       label: 'Balance',
       value: (
         <>
-          <span className="mr-1 text-sm font-normal text-muted-foreground">$</span>
+          <span className="mr-1 text-sm font-normal text-muted-foreground">{currencySymbol(currency)}</span>
           {fmtMoneyPlain(o.balance)}
         </>
       ),
-      sub: <>Initial {fmtMoney(data.account.initialBalance)}</>,
+      sub: <>Initial {money(data.account.initialBalance)}</>,
       icon: <Wallet className="h-4 w-4" />,
     },
     {
       label: 'Equity',
       value: (
         <>
-          <span className="mr-1 text-sm font-normal text-muted-foreground">$</span>
+          <span className="mr-1 text-sm font-normal text-muted-foreground">{currencySymbol(currency)}</span>
           {fmtMoneyPlain(o.equity)}
         </>
       ),
@@ -156,19 +172,19 @@ export function OverviewSection({
     },
     {
       label: 'Floating P/L',
-      value: <PnlValue value={o.floatingPnl} />,
+      value: <PnlValue value={o.floatingPnl} currency={currency} />,
       sub: <span className="num">{o.openPositionsCount} open positions</span>,
       icon: <Waves className="h-4 w-4" />,
     },
     {
       label: "Today's P/L",
-      value: <PnlValue value={o.todayPnl} />,
+      value: <PnlValue value={o.todayPnl} currency={currency} />,
       sub: <span className="num">{o.todayTrades} closed trades today</span>,
       icon: <CalendarClock className="h-4 w-4" />,
     },
     {
       label: 'Total Net Profit',
-      value: <PnlValue value={o.totalNetProfit} />,
+      value: <PnlValue value={o.totalNetProfit} currency={currency} />,
       sub: (
         <>
           <span className={cn('num', o.totalReturnPct >= 0 ? 'pnl-pos' : 'pnl-neg')}>
@@ -188,7 +204,7 @@ export function OverviewSection({
     {
       label: 'Profit Factor',
       value: fmtPF(o.profitFactor),
-      tone: o.profitFactor >= 1.3 ? 'pos' : o.profitFactor < 1 ? 'warn' : 'neutral',
+      tone: (o.profitFactor ?? 1) >= 1.3 ? 'pos' : (o.profitFactor ?? 1) < 1 ? 'warn' : 'neutral',
       sub: <>gross win ÷ gross loss</>,
       icon: <Scale className="h-4 w-4" />,
     },
@@ -278,9 +294,12 @@ export function OverviewSection({
       </div>
 
       {/* ── Equity curve ── */}
-      <Panel title="Equity Curve" description="منحنی رشد حساب — Balance در برابر Drawdown">
+      <Panel
+        title="Equity Curve"
+        description="Balance curve (realized) + floating equity sampled by the connector — snapshot points are shown when available"
+      >
         <ResponsiveContainer width="100%" height={260}>
-          <AreaChart data={data.equityCurve} margin={{ top: 6, right: 6, left: 0, bottom: 0 }}>
+          <AreaChart data={chartRows} margin={{ top: 6, right: 6, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id="eqFill" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor={CHART.info} stopOpacity={0.25} />
@@ -298,7 +317,7 @@ export function OverviewSection({
             />
             <YAxis
               domain={['auto', 'auto']}
-              tickFormatter={(v: number) => compactMoney(v)}
+              tickFormatter={(v: number) => fmtCompact(v, currency)}
               tick={{ fontSize: 10, fill: CHART.axis }}
               tickLine={false}
               axisLine={false}
@@ -310,17 +329,23 @@ export function OverviewSection({
               labelStyle={CHART.tooltip.labelStyle}
               itemStyle={CHART.tooltip.itemStyle}
               formatter={(_value, _name, item) => {
-                const p = item?.payload as EquityPoint | undefined
+                const p = item?.payload as (EquityPoint & { snapshotEquity?: number }) | undefined
                 if (!p) return null
                 return (
                   <div className="space-y-0.5 text-xs">
                     <div className="flex items-center justify-between gap-5">
                       <span className="opacity-70">Balance</span>
-                      <span className="num font-semibold">{fmtMoney(p.balance)}</span>
+                      <span className="num font-semibold">{money(p.balance)}</span>
                     </div>
+                    {typeof p.snapshotEquity === 'number' && (
+                      <div className="flex items-center justify-between gap-5">
+                        <span className="opacity-70">Equity (sampled)</span>
+                        <span className="num font-semibold">{money(p.snapshotEquity)}</span>
+                      </div>
+                    )}
                     <div className="flex items-center justify-between gap-5">
                       <span className="opacity-70">Drawdown</span>
-                      <span className="num text-[var(--neg)]">{fmtMoney(-p.ddAbs)}</span>
+                      <span className="num text-[var(--neg)]">{money(-p.ddAbs)}</span>
                     </div>
                     <div className="flex items-center justify-between gap-5">
                       <span className="opacity-70">DD %</span>
@@ -340,6 +365,18 @@ export function OverviewSection({
               activeDot={{ r: 3, strokeWidth: 0 }}
               isAnimationActive={false}
             />
+            {data.equitySeries.length > 0 && (
+              <Line
+                type="monotone"
+                dataKey="snapshotEquity"
+                stroke={CHART.pos}
+                strokeWidth={1.4}
+                strokeDasharray="4 3"
+                dot={false}
+                connectNulls
+                isAnimationActive={false}
+              />
+            )}
           </AreaChart>
         </ResponsiveContainer>
       </Panel>
@@ -363,7 +400,7 @@ export function OverviewSection({
                 minTickGap={22}
               />
               <YAxis
-                tickFormatter={(v: number) => compactMoney(v)}
+                tickFormatter={(v: number) => fmtCompact(v, currency)}
                 tick={{ fontSize: 10, fill: CHART.axis }}
                 tickLine={false}
                 axisLine={false}
@@ -378,7 +415,7 @@ export function OverviewSection({
                   const d = item?.payload as DailyPnl | undefined
                   return (
                     <div className="text-xs">
-                      <div className="num font-semibold">{fmtMoney(Number(value), { sign: true })}</div>
+                      <div className="num font-semibold">{money(Number(value), { sign: true })}</div>
                       {d && (
                         <div className="num opacity-70">
                           {d.trades} trades · {d.wins}W
@@ -412,7 +449,7 @@ export function OverviewSection({
                         {m.trades} trades
                       </span>
                     </div>
-                    <PnlValue value={m.pnl} className="text-xs font-semibold" />
+                    <PnlValue value={m.pnl} className="text-xs font-semibold" currency={currency} />
                   </div>
                   <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted/40">
                     <div
@@ -479,7 +516,7 @@ export function OverviewSection({
                   <span className="num">{cal.trades}</span> trades ·{' '}
                   <span className="num">{cal.cells.filter((c) => c.entry).length}</span> active days
                 </span>
-                <PnlValue value={cal.pnl} className="text-sm font-semibold" />
+                <PnlValue value={cal.pnl} className="text-sm font-semibold" currency={currency} />
               </div>
               <div className="grid grid-cols-7 gap-1">
                 {CAL_HEADER.map((d) => (
@@ -495,7 +532,7 @@ export function OverviewSection({
                 ))}
                 {cal.cells.map((c) => {
                   const title = c.entry
-                    ? `${c.day} ${cal.monthName} · ${fmtMoney(c.entry.pnl)} · ${c.entry.trades} trades`
+                    ? `${c.day} ${cal.monthName} · ${money(c.entry.pnl)} · ${c.entry.trades} trades`
                     : `${c.day} ${cal.monthName} · no trades`
                   return (
                     <div
@@ -515,7 +552,7 @@ export function OverviewSection({
                       <span className="text-[10px] font-semibold leading-none">{c.day}</span>
                       {c.entry && (
                         <span className="text-[9px] leading-none">
-                          {fmtMoney(c.entry.pnl, { sign: true, decimals: 0 })}
+                          {money(c.entry.pnl, { sign: true, decimals: 0 })}
                         </span>
                       )}
                     </div>
@@ -551,12 +588,12 @@ export function OverviewSection({
                   <div className="mt-1.5 flex items-end justify-between gap-2">
                     <div className="min-w-0 text-[11px] text-muted-foreground">
                       <div className="num">{fmtDuration(p.durationMinutes)}</div>
-                      <div className="num truncate">commission {fmtMoney(p.commission, { sign: true })}</div>
+                      <div className="num truncate">commission {money(p.commission, { sign: true })}</div>
                     </div>
                     <div className="shrink-0 text-right">
-                      <PnlValue value={p.profit + p.swap} className="text-sm font-semibold" />
+                      <PnlValue value={p.profit + p.swap} className="text-sm font-semibold" currency={currency} />
                       <div className="num text-[10px] text-muted-foreground">
-                        swap {fmtMoney(p.swap, { sign: true })}
+                        swap {money(p.swap, { sign: true })}
                       </div>
                     </div>
                   </div>

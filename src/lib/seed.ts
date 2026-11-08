@@ -108,6 +108,7 @@ export async function reseedDemo(): Promise<ReseedResult> {
   await db.equitySnapshot.deleteMany()
   await db.cashFlow.deleteMany()
   await db.trade.deleteMany()
+  await db.strategy.deleteMany()
   await db.account.deleteMany()
 
   const account = await db.account.create({
@@ -120,12 +121,32 @@ export async function reseedDemo(): Promise<ReseedResult> {
       currency: 'USD',
       leverage: 100,
       initialBalance: 10000,
+      tradeMode: 'DEMO',
+      timezone: 'Asia/Tehran',
     },
   })
+
+  // ── Strategy library (persisted so the Strategies section is usable) ──
+  const strategyColors = ['#34d399', '#f59e0b', '#f472b6', '#a78bfa']
+  const strategyRows: { id: string }[] = []
+  for (let i = 0; i < STRATEGY_DEFS.length; i++) {
+    const def = STRATEGY_DEFS[i]
+    strategyRows.push(
+      await db.strategy.create({
+        data: {
+          name: def.name,
+          description: def.description,
+          color: strategyColors[i % strategyColors.length],
+          magicNumbers: String(101 + i),
+        },
+      })
+    )
+  }
 
   // ── Generate history ──
   interface DraftTrade {
     positionId: number
+    positionTicket: number
     symbol: string
     direction: 'BUY' | 'SELL'
     volume: number
@@ -135,6 +156,8 @@ export async function reseedDemo(): Promise<ReseedResult> {
     closePrice: number
     stopLoss: number | null
     takeProfit: number | null
+    initialStopLoss: number | null
+    riskAmount: number
     commission: number
     swap: number
     profit: number
@@ -142,6 +165,8 @@ export async function reseedDemo(): Promise<ReseedResult> {
     pips: number | null
     rMultiple: number
     holdingMinutes: number
+    strategyId: string
+    magicNumber: number
     mistakes: string[]
     emotion: string
     notes: string | null
@@ -164,7 +189,10 @@ export async function reseedDemo(): Promise<ReseedResult> {
 
     for (let i = 0; i < nTrades; i++) {
       const strat = pickWeighted(rng, STRATEGY_DEFS.map((s) => [s.name, Math.round(s.weight * 100)] as [string, number]))
-      const def = STRATEGY_DEFS.find((s) => s.name === strat)!
+      const stratIdx = STRATEGY_DEFS.findIndex((s) => s.name === strat)
+      const def = STRATEGY_DEFS[stratIdx]
+      const strategyId = strategyRows[stratIdx].id
+      const magicNumber = 101 + stratIdx
       const symbol = pickWeighted(rng, SYMBOL_POOL[strat])
       const meta = SYMBOLS[symbol]
 
@@ -241,8 +269,10 @@ export async function reseedDemo(): Promise<ReseedResult> {
 
       const notes = chance(rng, 0.28) ? pick(rng, PERSIAN_NOTES) : null
 
+      const tid = positionId++
       drafts.push({
-        positionId: positionId++,
+        positionId: tid % 2_000_000_000, // demo rows also exercise the legacy 32-bit column
+        positionTicket: tid,
         symbol,
         direction,
         volume,
@@ -252,6 +282,8 @@ export async function reseedDemo(): Promise<ReseedResult> {
         closePrice,
         stopLoss: Math.round(stopLoss * 100000) / 100000,
         takeProfit: Math.round(takeProfit * 100000) / 100000,
+        initialStopLoss: Math.round(stopLoss * 100000) / 100000,
+        riskAmount: round2(riskAmount),
         commission: round2(commission),
         swap: round2(swap),
         profit: round2(profit),
@@ -259,6 +291,8 @@ export async function reseedDemo(): Promise<ReseedResult> {
         pips,
         rMultiple: round2(rMultiple),
         holdingMinutes,
+        strategyId,
+        magicNumber,
         mistakes,
         emotion,
         notes,
@@ -306,6 +340,8 @@ export async function reseedDemo(): Promise<ReseedResult> {
       closePrice: null as number | null,
       stopLoss: o.direction === 'BUY' ? openPrice - slDistance : openPrice + slDistance,
       takeProfit: o.direction === 'BUY' ? openPrice + slDistance * 2.2 : openPrice - slDistance * 2.2,
+      initialStopLoss: null as number | null,
+      riskAmount: null as number | null,
       commission: round2(commission),
       swap: round2(rand(rng, -2.5, 0.5)),
       profit: o.profit,
@@ -314,6 +350,8 @@ export async function reseedDemo(): Promise<ReseedResult> {
       rMultiple: null as number | null,
       holdingMinutes: null as number | null,
       status: 'OPEN',
+      strategyId: null as string | null,
+      magicNumber: null as number | null,
       mistakes: JSON.stringify([]),
       emotion: idx === 4 ? 'Impatient' : 'Calm',
       notes: null as string | null,
@@ -325,6 +363,7 @@ export async function reseedDemo(): Promise<ReseedResult> {
   await db.trade.createMany({
     data: drafts.map((d) => ({
       positionId: d.positionId,
+      positionTicket: BigInt(d.positionTicket),
       accountId: account.id,
       symbol: d.symbol,
       direction: d.direction,
@@ -335,6 +374,8 @@ export async function reseedDemo(): Promise<ReseedResult> {
       closePrice: d.closePrice,
       stopLoss: d.stopLoss,
       takeProfit: d.takeProfit,
+      initialStopLoss: d.initialStopLoss,
+      riskAmount: d.riskAmount,
       commission: d.commission,
       swap: d.swap,
       profit: d.profit,
@@ -343,12 +384,19 @@ export async function reseedDemo(): Promise<ReseedResult> {
       rMultiple: d.rMultiple,
       holdingMinutes: d.holdingMinutes,
       status: 'CLOSED',
+      strategyId: d.strategyId,
+      magicNumber: BigInt(d.magicNumber),
       mistakes: JSON.stringify(d.mistakes),
       emotion: d.emotion,
       notes: d.notes,
     })),
   })
-  await db.trade.createMany({ data: openTrades })
+  await db.trade.createMany({
+    data: openTrades.map((o) => ({
+      ...o,
+      positionTicket: BigInt(o.positionId + 9_000_000_000),
+    })),
+  })
 
   return {
     account: account.name,

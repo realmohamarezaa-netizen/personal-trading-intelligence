@@ -1,5 +1,16 @@
 // Personal Trading Intelligence — data layer
 // Local-first trading analytics schema (SQLite)
+//
+// v1.3.0 changes (additive only — existing user data is preserved):
+//  - Trade identity: one row per CLOSING deal (partial closes are separate
+//    legs) + one ephemeral row per live OPEN position. Legacy position-merged
+//    rows keep dealTicket = NULL. positionId keeps its legacy 32-bit value
+//    (now nullable + non-unique); positionTicket/dealTicket are BigInt and
+//    carry the full 64-bit MT5 tickets.
+//  - Strategy support: magic-number mapping + manual assignment.
+//  - CashFlow: every non-trade MT5 deal type is retained (category) with its
+//    external deal ticket (idempotent sync) instead of being silently dropped.
+//  - Account: tradeMode (REAL/DEMO/CONTEST) + user timezone for day bucketing.
 
 generator client {
   provider      = "prisma-client-js"
@@ -13,7 +24,7 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// One trading account (structure ready for multiple accounts)
+// One trading account (multi-account ready: keyed by MT5 login+server).
 model Account {
   id             String   @id @default("demo")
   name           String
@@ -23,50 +34,94 @@ model Account {
   currency       String   @default("USD")
   leverage       Int      @default(100)
   initialBalance Float
+  // MT5 ACCOUNT_TRADE_MODE: REAL | DEMO | CONTEST — demo and real accounts
+  // are fully independent rows and never mix data.
+  tradeMode      String   @default("REAL")
+  // IANA timezone used for trading-day bucketing (daily P/L, daily DD).
+  timezone       String   @default("Asia/Tehran")
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  trades     Trade[]
-  snapshots  EquitySnapshot[]
-  cashflows  CashFlow[]
-  syncLogs   SyncLog[]
+  trades    Trade[]
+  snapshots EquitySnapshot[]
+  cashflows CashFlow[]
+  syncLogs  SyncLog[]
 }
 
-// A single trade file = one MT5 Position (all deals of the position merged)
+// A trading record. Either one MT5 closing deal (a partial/full close leg,
+// dealTicket set) or one live open position (dealTicket NULL, status OPEN).
+// Legacy rows migrated from v1.2.x are whole positions with dealTicket NULL.
 model Trade {
-  id             String    @id @default(cuid())
+  id             String   @id @default(cuid())
   accountId      String
-  account        Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  positionId     Int       @unique // MT5 position ticket
+  account        Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  // Legacy 32-bit MT5 position ticket (kept for old rows; NULL for new rows
+  // whose ticket exceeds 32 bits — use positionTicket instead).
+  positionId     Int?
+  // Full 64-bit MT5 identifiers (BigInt — never lose precision).
+  positionTicket BigInt?
+  dealTicket     BigInt? // closing-deal ticket = idempotency key (NULL on open rows)
   symbol         String
   direction      String // BUY | SELL
-  volume         Float // lots
+  volume         Float // lots (closed volume for legs, remaining for open)
   openTime       DateTime
   closeTime      DateTime?
-  openPrice      Float
+  openPrice      Float // entry (VWAP of IN deals / position open price)
   closePrice     Float?
-  stopLoss       Float?
+  stopLoss       Float? // SL at close time (leg) / current SL (open)
   takeProfit     Float?
-  commission     Float     @default(0)
-  swap           Float     @default(0)
-  profit         Float     @default(0)
-  netProfit      Float     @default(0) // profit + commission + swap
+  // Initial risk (P3): SL registered at position entry + money risk of the
+  // whole position at entry. rMultiple is only valid when riskAmount > 0.
+  initialStopLoss Float?
+  riskAmount      Float?
+  commission     Float    @default(0)
+  swap           Float    @default(0)
+  profit         Float    @default(0)
+  netProfit      Float    @default(0) // profit + commission + swap
   pips           Float?
   rMultiple      Float?
   holdingMinutes Int?
-  status         String    @default("CLOSED") // OPEN | CLOSED
-  mistakes       String    @default("[]") // JSON array of strings
+  status         String   @default("CLOSED") // OPEN | CLOSED
+  // True when the position was opened before the sync window and MT5 could
+  // not restore its entry data (openTime/openPrice are best-effort then).
+  incompleteHistory Boolean @default(false)
+  // MT5 metadata (P4)
+  magicNumber    BigInt?
+  mt5Comment     String?
+  strategyId     String?
+  strategy       Strategy? @relation(fields: [strategyId], references: [id], onDelete: SetNull)
+  mistakes       String   @default("[]") // JSON array of strings
   emotion        String?
   notes          String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
+  @@unique([accountId, dealTicket]) // NULLs are distinct in SQLite → open rows never collide
   @@index([accountId, closeTime])
   @@index([accountId, status])
+  @@index([accountId, positionTicket])
+  @@index([accountId, strategyId])
   @@index([symbol])
 }
 
-// Periodic balance/equity snapshots (for floating drawdown measurement)
+// Trading strategy library (P4): manual CRUD + magic-number auto-mapping.
+model Strategy {
+  id           String   @id @default(cuid())
+  name         String   @unique
+  description  String?
+  color        String? // hex, e.g. "#34d399"
+  // Comma-separated MT5 magic numbers; a synced trade whose magic matches
+  // gets auto-assigned to this strategy (unless manually overridden).
+  magicNumbers String   @default("")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  trades Trade[]
+}
+
+// Periodic balance/equity snapshots (for floating drawdown measurement).
+// Retention policy: raw 45s rows are pruned after 30 days, keeping only the
+// last snapshot of each day beyond that window (see pruneRetention()).
 model EquitySnapshot {
   id        String   @id @default(cuid())
   accountId String
@@ -78,16 +133,24 @@ model EquitySnapshot {
   @@unique([accountId, ts])
 }
 
-// Deposits / withdrawals — kept separate from trading profit
+// Deposits / withdrawals / every other non-trade MT5 deal type.
+// `type` is the analytics polarity (DEPOSIT = money in, WITHDRAWAL = out,
+// amount always positive); `category` keeps the MT5 deal-type class
+// (BALANCE, CREDIT, BONUS, CHARGE, COMMISSION, INTEREST, TAX, CORRECTION,
+// DIVIDEND, OTHER) so nothing is silently discarded. CREDIT does not enter
+// the MT5 balance identity (the terminal reports it separately).
 model CashFlow {
-  id        String   @id @default(cuid())
-  accountId String
-  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  ts        DateTime
-  type      String // DEPOSIT | WITHDRAWAL
-  amount    Float
-  comment   String?
+  id         String   @id @default(cuid())
+  accountId  String
+  account    Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  ts         DateTime
+  type       String // DEPOSIT | WITHDRAWAL
+  amount     Float // always positive; direction encoded in `type`
+  category   String   @default("BALANCE")
+  externalId BigInt? // MT5 deal ticket — idempotency key (NULL: legacy/manual)
+  comment    String?
 
+  @@unique([accountId, externalId])
   @@index([accountId, ts])
 }
 
@@ -97,8 +160,20 @@ model SyncLog {
   account        Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
   ts             DateTime @default(now())
   source         String   @default("MT5_SYNC")
-  status         String   @default("OK")
+  status         String   @default("OK") // OK | PARTIAL | ERROR
   message        String
   tradesInserted Int      @default(0)
   tradesUpdated  Int      @default(0)
+
+  @@index([accountId, ts])
+}
+
+/// Runtime migration bookkeeping (src/lib/db-bootstrap.ts) — maps to the
+/// `_PtiMigration` table. Declared here so `prisma db push` manages it
+/// instead of trying to drop it.
+model PtiMigration {
+  id        String   @id
+  appliedAt DateTime @default(now())
+
+  @@map("_PtiMigration")
 }

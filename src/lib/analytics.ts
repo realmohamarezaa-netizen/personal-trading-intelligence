@@ -1,6 +1,34 @@
 // ─── Personal Trading Intelligence — Analytics Engine ────────────────────────
 // Pure computation layer, fully decoupled from UI and database.
-// All time bucketing uses Asia/Tehran (UTC+3:30, no DST since 2022).
+//
+// Mathematical definitions (v1.3.0 — every metric is documented here):
+//   * Balance curve        — realized money only: initial + closed P/L ± cash
+//                            flows (CREDIT excluded; MT5 reports credit
+//                            outside the balance).
+//   * Equity series        — as sampled by the MT5 connector (~45 s while
+//                            connected). Sampling resolution is a property of
+//                            the data and drawdown numbers derived from it are
+//                            labelled accordingly; they are NOT tick-level.
+//   * Drawdown             — trading/balance DD over the balance curve;
+//                            floating/equity DD over snapshots when coverage
+//                            exists (risk.ddBasis tells which one the
+//                            underwater chart uses).
+//   * Max daily drawdown   — worst intraday equity drop (snapshot basis when
+//                            snapshots cover the day), else worst realized
+//                            balance drop per trading day. Trading days are
+//                            bucketed in the account's timezone.
+//   * Expectancy           — average net P/L per closed trade (break-even
+//                            trades included), i.e. mean(netProfit).
+//   * Expectancy R         — mean R-Multiple over trades with a VALID initial
+//                            risk only (never guesses).
+//   * Win / Loss / BE rate — shares of all closed trades; win rate excludes
+//                            break-evens from both numerator and denominator.
+//   * Profit factor        — grossProfit / grossLoss; no losses & some profit
+//                            → 99.99 (∞ in the UI); nothing at all → null.
+//   * Recovery factor      — window-consistent: net P/L of the SELECTED range
+//                            ÷ max trading drawdown inside the SAME range.
+//   * R coverage           — share of closed trades whose R is valid
+//                            (initial SL + symbol tick data were known).
 
 import type {
   AnalyticsData,
@@ -25,26 +53,25 @@ import type {
   MistakeStatLite,
 } from './types'
 
-// ─── Tehran time helpers ─────────────────────────────────────────────────────
+// ─── Timezone-aware time helpers ─────────────────────────────────────────────
 
-const hourFmt = new Intl.DateTimeFormat('en-US', {
-  timeZone: 'Asia/Tehran',
-  hour12: false,
-  hour: '2-digit',
-})
-const dayFmt = new Intl.DateTimeFormat('en-CA', {
-  timeZone: 'Asia/Tehran',
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-})
-const weekdayFmt = new Intl.DateTimeFormat('en-US', {
-  timeZone: 'Asia/Tehran',
-  weekday: 'short',
-})
+type FmtCache = Map<string, Intl.DateTimeFormat>
+const hourFmts: FmtCache = new Map()
+const dayFmts: FmtCache = new Map()
+const weekdayFmts: FmtCache = new Map()
 
-export const TEHRAN_DAYS = ['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri']
-export const TEHRAN_DAYS_LONG = [
+function fmtFor(cache: FmtCache, tz: string, options: Intl.DateTimeFormatOptions, locale = 'en-US'): Intl.DateTimeFormat {
+  const key = `${locale}|${tz}`
+  let f = cache.get(key)
+  if (!f) {
+    f = new Intl.DateTimeFormat(locale, { timeZone: tz, hour12: false, ...options })
+    cache.set(key, f)
+  }
+  return f
+}
+
+export const WEEK_START_SATURDAY = ['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri']
+export const WEEKDAYS_LONG_SATURDAY = [
   'Saturday',
   'Sunday',
   'Monday',
@@ -54,34 +81,71 @@ export const TEHRAN_DAYS_LONG = [
   'Friday',
 ]
 
-/** Tehran local hour 0-23 */
-export function tehranHour(d: Date): number {
-  return parseInt(hourFmt.format(d), 10) % 24
+/** Local hour 0-23 in the given IANA timezone */
+export function hourIn(tz: string, d: Date): number {
+  return parseInt(fmtFor(hourFmts, tz, { hour: '2-digit' }).format(d), 10) % 24
 }
-/** YYYY-MM-DD in Tehran */
-export function tehranDateKey(d: Date): string {
-  return dayFmt.format(d)
+/** YYYY-MM-DD in the given timezone (en-CA yields the ISO-style key) */
+export function dateKeyIn(tz: string, d: Date): string {
+  return fmtFor(dayFmts, tz, { year: 'numeric', month: '2-digit', day: '2-digit' }, 'en-CA').format(d)
 }
-/** 0 = Saturday ... 6 = Friday (Tehran week) */
-export function tehranWeekday(d: Date): number {
-  const w = weekdayFmt.format(d).slice(0, 3)
-  const idx = ['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu'].indexOf(w)
+/** 0 = Saturday … 6 = Friday (regional trading week) */
+export function weekdayIn(tz: string, d: Date): number {
+  const w = fmtFor(weekdayFmts, tz, { weekday: 'short' }).format(d).slice(0, 3)
+  const idx = WEEK_START_SATURDAY.indexOf(w)
   return idx >= 0 ? idx : 6
 }
 
-// Approximate trading sessions in Tehran local hours
-const SESSIONS: { name: string; hours: number[]; label: string }[] = [
-  { name: 'Sydney', hours: [23, 0, 1, 2, 3, 4, 5], label: '23:00 – 06:00' },
-  { name: 'Tokyo', hours: [3, 4, 5, 6, 7, 8, 9], label: '03:00 – 10:00' },
-  { name: 'London', hours: [9, 10, 11, 12, 13, 14, 15, 16, 17], label: '09:00 – 18:00' },
-  { name: 'New York', hours: [16, 17, 18, 19, 20, 21, 22], label: '16:00 – 23:00' },
+// Legacy names kept for callers outside the engine (Tehran default).
+export const TEHRAN_DAYS = WEEK_START_SATURDAY
+export const TEHRAN_DAYS_LONG = WEEKDAYS_LONG_SATURDAY
+export const tehranHour = (d: Date) => hourIn('Asia/Tehran', d)
+export const tehranDateKey = (d: Date) => dateKeyIn('Asia/Tehran', d)
+export const tehranWeekday = (d: Date) => weekdayIn('Asia/Tehran', d)
+
+/**
+ * Trading sessions defined in their OWN exchange timezones, so London/NY
+ * daylight-saving shifts are handled by the Intl timezone conversion on every
+ * single trade. Sessions can overlap (a trade may count in London AND NY).
+ */
+export const SESSIONS: { name: string; tz: string; startHour: number; endHour: number; label: string }[] = [
+  { name: 'Sydney', tz: 'Australia/Sydney', startHour: 9, endHour: 18, label: '09:00 – 18:00 (Sydney)' },
+  { name: 'Tokyo', tz: 'Asia/Tokyo', startHour: 9, endHour: 18, label: '09:00 – 18:00 (Tokyo)' },
+  { name: 'London', tz: 'Europe/London', startHour: 8, endHour: 17, label: '08:00 – 17:00 (London)' },
+  { name: 'New York', tz: 'America/New_York', startHour: 8, endHour: 17, label: '08:00 – 17:00 (New York)' },
 ]
+
+function sessionHourCache(): Map<string, number> {
+  // cache: `${tz}|${isoMs}` → local hour (per-process memo)
+  const g = globalThis as unknown as { __ptiSessionHourCache?: Map<string, number> }
+  if (!g.__ptiSessionHourCache) g.__ptiSessionHourCache = new Map()
+  return g.__ptiSessionHourCache
+}
+
+function hourInSession(tz: string, d: Date): number {
+  const cache = sessionHourCache()
+  const key = `${tz}|${Math.floor(d.getTime() / 3_600_000)}` // hour resolution
+  let h = cache.get(key)
+  if (h === undefined) {
+    h = hourIn(tz, d)
+    if (cache.size > 50_000) cache.clear()
+    cache.set(key, h)
+  }
+  return h
+}
+
+function inSession(sess: (typeof SESSIONS)[number], d: Date): boolean {
+  const h = hourInSession(sess.tz, d)
+  return h >= sess.startHour && h < sess.endHour
+}
 
 // ─── Engine input types (plain rows) ─────────────────────────────────────────
 
 export interface EngineTrade {
   id: string
-  positionId: number
+  positionId: number | null
+  positionTicket: number | null
+  dealTicket: number | null
   symbol: string
   direction: 'BUY' | 'SELL'
   volume: number
@@ -91,6 +155,8 @@ export interface EngineTrade {
   closePrice: number | null
   stopLoss: number | null
   takeProfit: number | null
+  initialStopLoss: number | null
+  riskAmount: number | null
   commission: number
   swap: number
   profit: number
@@ -99,8 +165,17 @@ export interface EngineTrade {
   rMultiple: number | null
   holdingMinutes: number | null
   status: string
+  incompleteHistory: boolean
+  strategyId: string | null
+  magicNumber: number | null
   mistakes: string[]
   emotion: string | null
+}
+
+export interface EquitySnapshotPoint {
+  ts: Date
+  balance: number
+  equity: number
 }
 
 export interface EngineInput {
@@ -113,9 +188,12 @@ export interface EngineInput {
     currency: string
     leverage: number
     initialBalance: number
+    tradeMode: string
+    timezone: string
   }
   trades: EngineTrade[]
-  cashflows: { ts: Date; type: 'DEPOSIT' | 'WITHDRAWAL'; amount: number }[]
+  cashflows: { ts: Date; type: 'DEPOSIT' | 'WITHDRAWAL'; amount: number; category: string }[]
+  snapshots: EquitySnapshotPoint[]
   lastSyncAt: Date | null
   demoMode: boolean
 }
@@ -123,31 +201,27 @@ export interface EngineInput {
 export interface EngineOptions {
   range: RangeKey
   symbol?: string
+  /** explicit window for range = 'custom' */
+  from?: Date
+  to?: Date
 }
 
 // ─── Small utils ─────────────────────────────────────────────────────────────
 
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0)
 const mean = (xs: number[]) => (xs.length ? sum(xs) / xs.length : 0)
+const EPS = 0.0001
 
-function profitFactor(gp: number, gl: number): number {
-  if (gl <= 0.0001) return gp > 0 ? 99.99 : 0
+function profitFactor(gp: number, gl: number): number | null {
+  if (gl <= EPS) return gp > EPS ? 99.99 : null // no losses & no profit → nothing to measure
   return gp / gl
 }
 
-function safeDiv(a: number, b: number): number | null {
-  return b === 0 ? null : a / b
-}
-
-const RANGE_MS: Record<Exclude<RangeKey, 'all'>, number> = {
+const RANGE_MS: Record<Exclude<RangeKey, 'all' | 'custom'>, number> = {
   '7d': 7 * 864e5,
   '30d': 30 * 864e5,
   '90d': 90 * 864e5,
   '180d': 180 * 864e5,
-}
-
-function inRange(t: Date, from: Date | null): boolean {
-  return !from || t.getTime() >= from.getTime()
 }
 
 // ─── Core engine ─────────────────────────────────────────────────────────────
@@ -156,40 +230,48 @@ export function computeAnalytics(
   input: EngineInput,
   opts: EngineOptions
 ): AnalyticsData {
+  const tz = input.account.timezone || 'Asia/Tehran'
   const now = new Date()
   const from: Date | null =
-    opts.range === 'all' ? null : new Date(now.getTime() - RANGE_MS[opts.range])
+    opts.range === 'all'
+      ? null
+      : opts.range === 'custom'
+        ? (opts.from ?? null)
+        : new Date(now.getTime() - RANGE_MS[opts.range])
+  const to: Date = opts.range === 'custom' && opts.to ? opts.to : now
 
   const allClosed = input.trades
     .filter((t) => t.status === 'CLOSED' && t.closeTime)
     .sort((a, b) => a.closeTime!.getTime() - b.closeTime!.getTime())
   const allOpen = input.trades.filter((t) => t.status === 'OPEN')
 
-  const matches = (t: EngineTrade): boolean =>
-    !opts.symbol || t.symbol === opts.symbol
+  const matches = (t: EngineTrade): boolean => !opts.symbol || t.symbol === opts.symbol
 
   const closed = allClosed.filter(
-    (t) => matches(t) && inRange(t.closeTime!, from)
+    (t) => matches(t) && inRange(t.closeTime!, from, to)
   )
   const open = allOpen.filter(matches)
 
-  // ── Account-level money (unfiltered) ──
-  const deposits = sum(input.cashflows.filter((c) => c.type === 'DEPOSIT').map((c) => c.amount))
-  const withdrawals = sum(input.cashflows.filter((c) => c.type === 'WITHDRAWAL').map((c) => c.amount))
+  // ── Account-level money (NEVER affected by the symbol filter) ──
+  // CREDIT deals are excluded: the MT5 terminal reports credit separately,
+  // so folding it into the balance would break reconciliation.
+  const cashReal = input.cashflows.filter((c) => c.category !== 'CREDIT')
+  const deposits = sum(cashReal.filter((c) => c.type === 'DEPOSIT').map((c) => c.amount))
+  const withdrawals = sum(cashReal.filter((c) => c.type === 'WITHDRAWAL').map((c) => c.amount))
   const totalNetProfitAll = sum(allClosed.map((t) => t.netProfit))
   const balance = input.account.initialBalance + deposits - withdrawals + totalNetProfitAll
   const floatingPnl = sum(open.map((t) => t.profit + t.swap))
   const equity = balance + floatingPnl
 
-  const todayKey = tehranDateKey(now)
-  const todayTradesAll = allClosed.filter((t) => tehranDateKey(t.closeTime!) === todayKey)
+  const todayKey = dateKeyIn(tz, now)
+  const todayTradesAll = allClosed.filter((t) => dateKeyIn(tz, t.closeTime!) === todayKey)
   const todayPnl = sum(todayTradesAll.map((t) => t.netProfit))
 
-  // ── Equity curve & drawdown (account-level, range-scoped) ──
+  // ── Balance curve & trading drawdown (account-level, range-scoped) ──
   interface Ev { ts: number; delta: number }
   const events: Ev[] = [
     ...allClosed.map((t) => ({ ts: t.closeTime!.getTime(), delta: t.netProfit })),
-    ...input.cashflows.map((c) => ({
+    ...cashReal.map((c) => ({
       ts: c.ts.getTime(),
       delta: c.type === 'DEPOSIT' ? c.amount : -c.amount,
     })),
@@ -205,7 +287,7 @@ export function computeAnalytics(
   }
   const startT = from ? from.getTime() : events.length ? events[0].ts : now.getTime()
 
-  const equityCurve: EquityPoint[] = []
+  const balanceCurve: EquityPoint[] = []
   let peak = running
   let maxDdAbs = 0
   let maxDdPct = 0
@@ -222,12 +304,13 @@ export function computeAnalytics(
     }
     if (ddAbs > maxDdAbs) maxDdAbs = ddAbs
     if (ddPct > maxDdPct) maxDdPct = ddPct
-    equityCurve.push({
+    balanceCurve.push({
       t: new Date(t).toISOString(),
       balance: round2(bal),
       equity: round2(bal),
       ddAbs: round2(ddAbs),
       ddPct: round2(ddPct),
+      source: 'balance',
     })
   }
 
@@ -237,14 +320,54 @@ export function computeAnalytics(
     pushPoint(events[i].ts, running)
   }
 
-  const underwater: UnderwaterPoint[] = equityCurve
-    .filter((_, i) => equityCurve.length <= 700 || i % Math.ceil(equityCurve.length / 700) === 0)
-    .map((p) => ({ t: p.t, pct: -p.ddPct }))
+  // ── Floating (equity) drawdown from connector snapshots ──
+  const snapshots = [...input.snapshots].sort((a, b) => a.ts.getTime() - b.ts.getTime())
+  const inWindow = (d: Date) => (!from || d.getTime() >= from.getTime()) && d.getTime() <= to.getTime()
+  const windowSnaps = snapshots.filter((s) => inWindow(s.ts))
 
-  // Drawdown periods
+  let equityMaxDdAbs: number | null = null
+  let equityMaxDdPct: number | null = null
+  let equitySeries: EquityPoint[] = []
+  let underwater: UnderwaterPoint[] = []
+  let ddBasis: 'equity' | 'balance' = 'balance'
+  let currentDdPct = balanceCurve.length ? balanceCurve[balanceCurve.length - 1].ddPct : 0
+
+  if (windowSnaps.length >= 2) {
+    let eqPeak = windowSnaps[0].equity
+    let eqMaxAbs = 0
+    let eqMaxPct = 0
+    equitySeries = windowSnaps.map((s) => {
+      if (s.equity > eqPeak) eqPeak = s.equity
+      const ddAbs = Math.max(0, eqPeak - s.equity)
+      const ddPct = eqPeak > 0 ? (ddAbs / eqPeak) * 100 : 0
+      if (ddAbs > eqMaxAbs) eqMaxAbs = ddAbs
+      if (ddPct > eqMaxPct) eqMaxPct = ddPct
+      return {
+        t: s.ts.toISOString(),
+        balance: round2(s.balance),
+        equity: round2(s.equity),
+        ddAbs: round2(ddAbs),
+        ddPct: round2(ddPct),
+        source: 'equity' as const,
+      }
+    })
+    equityMaxDdAbs = round2(eqMaxAbs)
+    equityMaxDdPct = round2(eqMaxPct)
+    currentDdPct = equitySeries[equitySeries.length - 1].ddPct
+    ddBasis = 'equity'
+    underwater = equitySeries
+      .filter((_, i) => equitySeries.length <= 700 || i % Math.ceil(equitySeries.length / 700) === 0)
+      .map((p) => ({ t: p.t, pct: -p.ddPct }))
+  } else {
+    underwater = balanceCurve
+      .filter((_, i) => balanceCurve.length <= 700 || i % Math.ceil(balanceCurve.length / 700) === 0)
+      .map((p) => ({ t: p.t, pct: -p.ddPct }))
+  }
+
+  // Drawdown periods (trading/balance basis — always available)
   const ddPeriods: DDPeriod[] = []
   let cur: { startT: number; depthPct: number; depthAbs: number; troughT: number } | null = null
-  for (const p of equityCurve) {
+  for (const p of balanceCurve) {
     if (p.ddAbs > 0.005) {
       if (!cur) cur = { startT: new Date(p.t).getTime(), depthPct: p.ddPct, depthAbs: p.ddAbs, troughT: new Date(p.t).getTime() }
       else if (p.ddPct > cur.depthPct) {
@@ -270,33 +393,58 @@ export function computeAnalytics(
       end: null,
       depthPct: round2(cur.depthPct),
       depthAbs: round2(cur.depthAbs),
-      days: round1((now.getTime() - cur.startT) / 864e5),
+      days: round1((to.getTime() - cur.startT) / 864e5),
       recovered: false,
     })
   }
   const longestDdDays = ddPeriods.length ? Math.max(...ddPeriods.map((p) => p.days)) : 0
-  const longestRecoveryDays =
-    ddPeriods.filter((p) => p.recovered).length
-      ? Math.max(...ddPeriods.filter((p) => p.recovered).map((p) => p.days))
-      : null
-  const currentDdPct = equityCurve.length ? equityCurve[equityCurve.length - 1].ddPct : 0
+  const recoveredPeriods = ddPeriods.filter((p) => p.recovered)
+  const longestRecoveryDays = recoveredPeriods.length
+    ? Math.max(...recoveredPeriods.map((p) => p.days))
+    : null
 
-  // Daily drawdown (account-level, all history)
+  // ── Max daily drawdown ──
+  // Preferred basis: snapshot equity (true floating intraday drawdown per
+  // trading day in the account timezone). Fallback (when no snapshot covers
+  // the window): realized balance change per trading day — explicitly labelled.
   let maxDailyDdAbs = 0
   let maxDailyDdPct = 0
+  let dailyDdBasis: 'equity' | 'balance' = 'balance'
   {
+    // equity basis
+    const byDay = new Map<string, EquitySnapshotPoint[]>()
+    for (const s of windowSnaps) {
+      const k = dateKeyIn(tz, s.ts)
+      const arr = byDay.get(k) ?? []
+      arr.push(s)
+      byDay.set(k, arr)
+    }
+    for (const [, rows] of byDay) {
+      const startEq = rows[0].equity
+      let minEq = startEq
+      for (const r of rows) if (r.equity < minEq) minEq = r.equity
+      const dd = startEq - minEq
+      if (dd > maxDailyDdAbs) maxDailyDdAbs = dd
+      const pct = startEq > 0 ? (dd / startEq) * 100 : 0
+      if (pct > maxDailyDdPct) maxDailyDdPct = pct
+    }
+    if (byDay.size >= 2) dailyDdBasis = 'equity'
+  }
+  if (dailyDdBasis === 'balance') {
+    // realized basis (fallback): per trading day, worst dip of the running
+    // balance after each closed trade / cashflow (no intraday information).
     let dayKey = ''
     let dayStart = 0
     let dayMin = Infinity
     let bal = input.account.initialBalance
-    const cfSorted = [...input.cashflows].sort((a, b) => a.ts.getTime() - b.ts.getTime())
+    const cfSorted = [...cashReal].sort((a, b) => a.ts.getTime() - b.ts.getTime())
     let ci = 0
     for (const t of allClosed) {
       while (ci < cfSorted.length && cfSorted[ci].ts.getTime() <= t.closeTime!.getTime()) {
         const c = cfSorted[ci++]
         bal += c.type === 'DEPOSIT' ? c.amount : -c.amount
       }
-      const k = tehranDateKey(t.closeTime!)
+      const k = dateKeyIn(tz, t.closeTime!)
       if (k !== dayKey) {
         if (dayKey && dayMin < Infinity && dayStart > 0) {
           const dd = dayStart - dayMin
@@ -319,26 +467,35 @@ export function computeAnalytics(
     }
   }
 
-  // ── Performance stats (filtered) ──
+  // ── Performance stats (symbol/range filtered) ──
   const nets = closed.map((t) => t.netProfit)
-  const winsArr = closed.filter((t) => t.netProfit > 0.0001)
-  const lossesArr = closed.filter((t) => t.netProfit < -0.0001)
-  const beArr = closed.filter((t) => Math.abs(t.netProfit) <= 0.0001)
+  const winsArr = closed.filter((t) => t.netProfit > EPS)
+  const lossesArr = closed.filter((t) => t.netProfit < -EPS)
+  const beArr = closed.filter((t) => Math.abs(t.netProfit) <= EPS)
   const grossProfit = sum(winsArr.map((t) => t.netProfit))
   const grossLoss = Math.abs(sum(lossesArr.map((t) => t.netProfit)))
-  const winRate = winsArr.length + lossesArr.length ? (winsArr.length / (winsArr.length + lossesArr.length)) * 100 : 0
-  const avgWin = winsArr.length ? grossProfit / winsArr.length : 0
-  const avgLoss = lossesArr.length ? grossLoss / lossesArr.length : 0
-  const lossRate = winsArr.length + lossesArr.length ? lossesArr.length / (winsArr.length + lossesArr.length) : 0
-  const expectancy = winRate / 100 * avgWin - lossRate * avgLoss
+  const decided = winsArr.length + lossesArr.length
+  const winRate = decided ? (winsArr.length / decided) * 100 : 0
+  const lossRate = decided ? (lossesArr.length / decided) * 100 : 0
+  const breakEvenRate = closed.length ? (beArr.length / closed.length) * 100 : 0
+  // Expectancy = average net result per closed trade, break-evens INCLUDED
+  // (the mathematically standard definition; equals sum(nets)/count).
+  const expectancy = closed.length ? mean(nets) : 0
+  // R statistics only over VALID R values (initial risk was actually known)
   const rVals = closed.map((t) => t.rMultiple).filter((r): r is number => r !== null && isFinite(r))
+  const closedWithValidR = closed.filter((t) => t.riskAmount !== null && t.riskAmount > 0)
+  const rCoverage = closed.length ? (closedWithValidR.length / closed.length) * 100 : 0
   const expectancyR = rVals.length ? mean(rVals) : null
   const holdVals = closed.map((t) => t.holdingMinutes).filter((v): v is number => v !== null)
   const avgHoldMinutes = holdVals.length ? mean(holdVals) : 0
   const pipsVals = closed.map((t) => t.pips).filter((v): v is number => v !== null)
   const pf = profitFactor(grossProfit, grossLoss)
-  const maxDdForRecovery = maxDdAbs || 1
-  const recoveryFactor = closed.length ? totalNetProfitAll / maxDdForRecovery : null
+  // Recovery factor is window-consistent: net P/L of the SELECTED window
+  // (account level, symbol filter ignored) ÷ max trading DD of the SAME window.
+  const rangeNetProfit = sum(
+    allClosed.filter((t) => inRange(t.closeTime!, from, to)).map((t) => t.netProfit)
+  )
+  const recoveryFactor = maxDdAbs > 0.005 ? rangeNetProfit / maxDdAbs : null
 
   const streak = computeStreaks(closed)
 
@@ -351,18 +508,22 @@ export function computeAnalytics(
     losses: lossesArr.length,
     breakEven: beArr.length,
     winRate: round1(winRate),
-    avgWin: round2(avgWin),
-    avgLoss: round2(avgLoss),
+    lossRate: round1(lossRate),
+    breakEvenRate: round1(breakEvenRate),
+    avgWin: winsArr.length ? round2(grossProfit / winsArr.length) : null,
+    avgLoss: lossesArr.length ? round2(grossLoss / lossesArr.length) : null,
     largestWin: winsArr.length ? round2(Math.max(...winsArr.map((t) => t.netProfit))) : 0,
     largestLoss: lossesArr.length ? round2(Math.min(...lossesArr.map((t) => t.netProfit))) : 0,
     expectancy: round2(expectancy),
     expectancyR: expectancyR !== null ? round2(expectancyR) : null,
-    profitFactor: round2(pf),
+    profitFactor: pf === null ? null : round2(pf),
     recoveryFactor: recoveryFactor !== null ? round2(recoveryFactor) : null,
     avgHoldMinutes: Math.round(avgHoldMinutes),
     maxConsecWins: streak.maxW,
     maxConsecLosses: streak.maxL,
     avgR: rVals.length ? round2(mean(rVals)) : null,
+    rCoverage: round1(rCoverage),
+    rValidCount: closedWithValidR.length,
     grossProfit: round2(grossProfit),
     grossLoss: round2(grossLoss),
     totalVolume: round2(sum(closed.map((t) => t.volume))),
@@ -376,7 +537,7 @@ export function computeAnalytics(
   // ── Daily / monthly / calendar ──
   const dailyMap = new Map<string, { pnl: number; trades: number; wins: number }>()
   for (const t of closed) {
-    const k = tehranDateKey(t.closeTime!)
+    const k = dateKeyIn(tz, t.closeTime!)
     const e = dailyMap.get(k) ?? { pnl: 0, trades: 0, wins: 0 }
     e.pnl += t.netProfit
     e.trades += 1
@@ -390,7 +551,7 @@ export function computeAnalytics(
 
   const monthlyMap = new Map<string, { pnl: number; trades: number }>()
   for (const t of closed) {
-    const k = tehranDateKey(t.closeTime!).slice(0, 7)
+    const k = dateKeyIn(tz, t.closeTime!).slice(0, 7)
     const e = monthlyMap.get(k) ?? { pnl: 0, trades: 0 }
     e.pnl += t.netProfit
     e.trades += 1
@@ -400,17 +561,17 @@ export function computeAnalytics(
     .sort((a, b) => a[0].localeCompare(b[0]))
     .map(([month, e]) => ({ month, pnl: round2(e.pnl), trades: e.trades }))
 
-  // ── Time analysis (filtered, openTime-based) ──
+  // ── Time analysis (filtered, openTime-based, account timezone) ──
   type HourAcc = HourStat & { wins: number }
   const hourly: HourAcc[] = Array.from({ length: 24 }, (_, h) => ({ hour: h, pnl: 0, trades: 0, winRate: 0, wins: 0 }))
   const dayAgg: { pnl: number; trades: number; wins: number }[] = Array.from({ length: 7 }, () => ({ pnl: 0, trades: 0, wins: 0 }))
   const matrix: MatrixCell[] = []
   const matrixMap = new Map<string, { pnl: number; trades: number }>()
-  const sessionAgg = SESSIONS.map(() => ({ pnl: 0, trades: number0(), wins: 0 }))
+  const sessionAgg = SESSIONS.map(() => ({ pnl: 0, trades: 0, wins: 0 }))
 
   for (const t of closed) {
-    const h = tehranHour(t.openTime)
-    const wd = tehranWeekday(t.openTime)
+    const h = hourIn(tz, t.openTime)
+    const wd = weekdayIn(tz, t.openTime)
     const he = hourly[h]
     he.pnl += t.netProfit
     he.trades += 1
@@ -425,7 +586,7 @@ export function computeAnalytics(
     me.trades += 1
     matrixMap.set(mk, me)
     sessionAgg.forEach((s, si) => {
-      if (SESSIONS[si].hours.includes(h)) {
+      if (inSession(SESSIONS[si], t.openTime)) {
         s.pnl += t.netProfit
         s.trades += 1
         if (t.netProfit > 0) s.wins += 1
@@ -444,18 +605,21 @@ export function computeAnalytics(
     trades: h.trades,
     winRate: h.trades ? round1((h.wins / h.trades) * 100) : 0,
   }))
-  const meaningfulHours = hourStats.filter((h) => h.trades >= 3)
+  // Best/worst hours need a minimum statistical sample — hours with fewer
+  // than MIN_SAMPLE trades are never highlighted as "best"/"worst".
+  const MIN_SAMPLE = 3
+  const meaningfulHours = hourStats.filter((h) => h.trades >= MIN_SAMPLE)
   const bestHour = meaningfulHours.length ? meaningfulHours.reduce((a, b) => (b.pnl > a.pnl ? b : a)) : null
   const worstHour = meaningfulHours.length ? meaningfulHours.reduce((a, b) => (b.pnl < a.pnl ? b : a)) : null
 
   const dayStats: DayStat[] = dayAgg.map((d, i) => ({
     day: i,
-    name: TEHRAN_DAYS_LONG[i],
+    name: WEEKDAYS_LONG_SATURDAY[i],
     pnl: round2(d.pnl),
     trades: d.trades,
     winRate: d.trades ? round1((d.wins / d.trades) * 100) : 0,
   }))
-  const meaningfulDays = dayStats.filter((d) => d.trades >= 3)
+  const meaningfulDays = dayStats.filter((d) => d.trades >= MIN_SAMPLE)
   const bestDay = meaningfulDays.length ? meaningfulDays.reduce((a, b) => (b.pnl > a.pnl ? b : a)) : null
   const worstDay = meaningfulDays.length ? meaningfulDays.reduce((a, b) => (b.pnl < a.pnl ? b : a)) : null
 
@@ -476,6 +640,8 @@ export function computeAnalytics(
     worstHour,
     bestDay,
     worstDay,
+    minSample: MIN_SAMPLE,
+    timezone: tz,
   }
 
   // ── Symbol analysis (filtered) ──
@@ -487,8 +653,8 @@ export function computeAnalytics(
   }
   const symbols: SymbolStat[] = [...symbolMap.entries()]
     .map(([sym, ts]) => {
-      const w = ts.filter((t) => t.netProfit > 0.0001)
-      const l = ts.filter((t) => t.netProfit < -0.0001)
+      const w = ts.filter((t) => t.netProfit > EPS)
+      const l = ts.filter((t) => t.netProfit < -EPS)
       const gp = sum(w.map((t) => t.netProfit))
       const gl = Math.abs(sum(l.map((t) => t.netProfit)))
       const rv = ts.map((t) => t.rMultiple).filter((r): r is number => r !== null)
@@ -507,7 +673,7 @@ export function computeAnalytics(
         symbol: sym,
         trades: ts.length,
         winRate: w.length + l.length ? round1((w.length / (w.length + l.length)) * 100) : 0,
-        profitFactor: round2(profitFactor(gp, gl)),
+        profitFactor: profitFactor(gp, gl) === null ? null : round2(profitFactor(gp, gl)!),
         netPnl: round2(sum(ts.map((t) => t.netProfit))),
         ddPct: round2((mdd / Math.max(input.account.initialBalance, 1)) * 100),
         avgR: rv.length ? round2(mean(rv)) : null,
@@ -524,8 +690,8 @@ export function computeAnalytics(
   // ── Direction analysis (filtered) ──
   const directions: DirectionStat[] = (['BUY', 'SELL'] as const).map((dir) => {
     const ts = closed.filter((t) => t.direction === dir)
-    const w = ts.filter((t) => t.netProfit > 0.0001)
-    const l = ts.filter((t) => t.netProfit < -0.0001)
+    const w = ts.filter((t) => t.netProfit > EPS)
+    const l = ts.filter((t) => t.netProfit < -EPS)
     const gp = sum(w.map((t) => t.netProfit))
     const gl = Math.abs(sum(l.map((t) => t.netProfit)))
     const rv = ts.map((t) => t.rMultiple).filter((r): r is number => r !== null)
@@ -534,9 +700,9 @@ export function computeAnalytics(
       trades: ts.length,
       winRate: w.length + l.length ? round1((w.length / (w.length + l.length)) * 100) : 0,
       netPnl: round2(sum(ts.map((t) => t.netProfit))),
-      profitFactor: round2(profitFactor(gp, gl)),
-      avgWin: w.length ? round2(gp / w.length) : 0,
-      avgLoss: l.length ? round2(gl / l.length) : 0,
+      profitFactor: profitFactor(gp, gl) === null ? null : round2(profitFactor(gp, gl)!),
+      avgWin: w.length ? round2(gp / w.length) : null,
+      avgLoss: l.length ? round2(gl / l.length) : null,
       avgR: rv.length ? round2(mean(rv)) : null,
     }
   })
@@ -545,8 +711,13 @@ export function computeAnalytics(
   const risk: RiskAnalysis = {
     maxDdAbs: round2(maxDdAbs),
     maxDdPct: round2(maxDdPct),
+    equityMaxDdAbs,
+    equityMaxDdPct,
+    ddBasis,
     maxDailyDdAbs: round2(maxDailyDdAbs),
     maxDailyDdPct: round2(maxDailyDdPct),
+    dailyDdBasis,
+    snapshotCount: windowSnaps.length,
     avgDdPct: ddCount ? round2(ddSum / ddCount) : 0,
     currentDdPct: round2(currentDdPct),
     longestDdDays,
@@ -577,6 +748,7 @@ export function computeAnalytics(
     .map((t) => ({
       id: t.id,
       positionId: t.positionId,
+      positionTicket: t.positionTicket !== null ? String(t.positionTicket) : null,
       symbol: t.symbol,
       direction: t.direction,
       volume: t.volume,
@@ -596,11 +768,11 @@ export function computeAnalytics(
     : 0
 
   return {
-    account: input.account,
+    account: { ...input.account, tradeMode: (['REAL', 'DEMO', 'CONTEST'].includes(input.account.tradeMode) ? input.account.tradeMode : 'REAL') as AnalyticsData['account']['tradeMode'] },
     range: {
       key: opts.range,
       from: from ? from.toISOString() : null,
-      to: now.toISOString(),
+      to: to.toISOString(),
     },
     overview: {
       balance: round2(balance),
@@ -610,7 +782,7 @@ export function computeAnalytics(
       totalNetProfit: round2(totalNetProfitAll),
       totalReturnPct: round1(totalReturnPct),
       winRate: round1(winRate),
-      profitFactor: round2(pf),
+      profitFactor: pf === null ? null : round2(pf),
       maxDrawdownPct: round2(maxDdPct),
       totalTrades: closed.length,
       openPositionsCount: open.length,
@@ -618,7 +790,8 @@ export function computeAnalytics(
       withdrawals: round2(withdrawals),
       todayTrades: todayTradesAll.length,
     },
-    equityCurve,
+    equityCurve: balanceCurve,
+    equitySeries,
     dailyPnl,
     monthlyPnl,
     calendar,
@@ -638,11 +811,114 @@ export function computeAnalytics(
   }
 }
 
+// ─── Strategy statistics (P4) ────────────────────────────────────────────────
+
+export interface StrategyStat {
+  strategyId: string | null
+  name: string
+  color: string | null
+  totalTrades: number
+  wins: number
+  losses: number
+  winRate: number
+  profitFactor: number | null
+  expectancy: number | null
+  avgR: number | null
+  maxDd: number
+  maxConsecLosses: number
+  netProfit: number
+  bySymbol: { symbol: string; trades: number; pnl: number }[]
+  byHour: { hour: number; trades: number; pnl: number }[]
+}
+
+/** Per-strategy performance over closed trades (account level). */
+export function computeStrategyStats(
+  trades: EngineTrade[],
+  strategies: { id: string; name: string; color: string | null }[],
+  tz: string
+): StrategyStat[] {
+  const closed = trades.filter((t) => t.status === 'CLOSED' && t.closeTime)
+  const buckets = new Map<string, EngineTrade[]>()
+  for (const t of closed) {
+    const key = t.strategyId ?? 'unassigned'
+    const arr = buckets.get(key) ?? []
+    arr.push(t)
+    buckets.set(key, arr)
+  }
+
+  const stats: StrategyStat[] = []
+  for (const [key, ts] of buckets) {
+    const s = strategies.find((x) => x.id === key)
+    const name = key === 'unassigned' ? 'Unassigned' : (s?.name ?? key)
+    const wins = ts.filter((t) => t.netProfit > EPS)
+    const losses = ts.filter((t) => t.netProfit < -EPS)
+    const gp = sum(wins.map((t) => t.netProfit))
+    const gl = Math.abs(sum(losses.map((t) => t.netProfit)))
+    const rv = ts.map((t) => t.rMultiple).filter((r): r is number => r !== null)
+
+    let cum = 0
+    let pk = 0
+    let mdd = 0
+    let curL = 0
+    let maxL = 0
+    for (const t of [...ts].sort((a, b) => a.closeTime!.getTime() - b.closeTime!.getTime())) {
+      cum += t.netProfit
+      if (cum > pk) pk = cum
+      if (pk - cum > mdd) mdd = pk - cum
+      if (t.netProfit < -EPS) {
+        curL++
+        maxL = Math.max(maxL, curL)
+      } else if (t.netProfit > EPS) {
+        curL = 0
+      }
+    }
+
+    const symMap = new Map<string, { trades: number; pnl: number }>()
+    const hourMap = new Map<number, { trades: number; pnl: number }>()
+    for (const t of ts) {
+      const se = symMap.get(t.symbol) ?? { trades: 0, pnl: 0 }
+      se.trades++
+      se.pnl += t.netProfit
+      symMap.set(t.symbol, se)
+      const h = hourIn(tz, t.openTime)
+      const he = hourMap.get(h) ?? { trades: 0, pnl: 0 }
+      he.trades++
+      he.pnl += t.netProfit
+      hourMap.set(h, he)
+    }
+
+    stats.push({
+      strategyId: key === 'unassigned' ? null : key,
+      name,
+      color: s?.color ?? null,
+      totalTrades: ts.length,
+      wins: wins.length,
+      losses: losses.length,
+      winRate: wins.length + losses.length ? round1((wins.length / (wins.length + losses.length)) * 100) : 0,
+      profitFactor: profitFactor(gp, gl) === null ? null : round2(profitFactor(gp, gl)!),
+      expectancy: ts.length ? round2(mean(ts.map((t) => t.netProfit))) : null,
+      avgR: rv.length ? round2(mean(rv)) : null,
+      maxDd: round2(mdd),
+      maxConsecLosses: maxL,
+      netProfit: round2(sum(ts.map((t) => t.netProfit))),
+      bySymbol: [...symMap.entries()]
+        .map(([symbol, e]) => ({ symbol, trades: e.trades, pnl: round2(e.pnl) }))
+        .sort((a, b) => b.pnl - a.pnl)
+        .slice(0, 8),
+      byHour: [...hourMap.entries()]
+        .map(([hour, e]) => ({ hour, trades: e.trades, pnl: round2(e.pnl) }))
+        .sort((a, b) => a.hour - b.hour),
+    })
+  }
+  return stats.sort((a, b) => b.netProfit - a.netProfit)
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function number0(): number {
-  return 0
+function inRange(t: Date, from: Date | null, to: Date): boolean {
+  return (!from || t.getTime() >= from.getTime()) && t.getTime() <= to.getTime()
 }
+
 function round1(n: number): number {
   return Math.round(n * 10) / 10
 }
@@ -653,11 +929,11 @@ function round2(n: number): number {
 function computeStreaks(sorted: EngineTrade[]): { maxW: number; maxL: number; curW: number; curL: number } {
   let maxW = 0, maxL = 0, curW = 0, curL = 0
   for (const t of sorted) {
-    if (t.netProfit > 0.0001) {
+    if (t.netProfit > EPS) {
       curW++
       curL = 0
       maxW = Math.max(maxW, curW)
-    } else if (t.netProfit < -0.0001) {
+    } else if (t.netProfit < -EPS) {
       curL++
       curW = 0
       maxL = Math.max(maxL, curL)
@@ -676,7 +952,9 @@ function buildRHistogram(closed: EngineTrade[]): RHistogramBucket[] {
     { label: '+2R..+3R', test: (r) => r >= 2 && r < 3 },
     { label: '> +3R', test: (r) => r >= 3 },
   ]
-  const withR = closed.filter((t) => t.rMultiple !== null)
+  // Only trades with a VALID R (a real initial risk) enter the histogram —
+  // trades without one are counted in rCoverage instead of being faked to 0R.
+  const withR = closed.filter((t) => t.rMultiple !== null && isFinite(t.rMultiple))
   return defs.map((d) => {
     const ts = withR.filter((t) => d.test(t.rMultiple!))
     return { bucket: d.label, count: ts.length, pnl: round2(sum(ts.map((t) => t.netProfit))) }

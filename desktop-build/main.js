@@ -2,22 +2,32 @@
 // Starts the bundled Next.js standalone server on 127.0.0.1, waits for its
 // health endpoint, then shows the dashboard in a native window. Everything is
 // local-only: the server binds to the loopback interface exclusively.
+//
+// DATA SAFETY (P0): the trading database lives in the per-user data directory
+// (%APPDATA%\TradingIntelligence\data) — OUTSIDE the program folder. The
+// Electron shell migrates a legacy v1.2.x database into that location once,
+// atomically and with a backup (desktop-build/user-data.js). Reinstalling,
+// updating or uninstalling the program never deletes the user's data.
 
 const { app, BrowserWindow, shell } = require('electron')
 const { spawn } = require('child_process')
 const fs = require('fs')
 const http = require('http')
 const path = require('path')
+const { resolveDataPaths, ensureDatabase } = require('./user-data')
 
 const PORT = 3517
 const HOST = '127.0.0.1'
 const APP_DIR = __dirname
 const SERVER_DIR = path.join(APP_DIR, 'server')
-const DB_FILE = path.join(APP_DIR, 'db', 'custom.db').replace(/\\/g, '/')
 const PY_DIR = path.join(APP_DIR, 'python')
 const PY_EXE = path.join(PY_DIR, 'python.exe')
 const SYNC_SCRIPT = path.join(APP_DIR, 'connector', 'sync_service.py')
-const LOG_DIR = path.join(APP_DIR, 'logs')
+
+// Stable per-user data directory (Electron would otherwise derive it from the
+// package name; pin it so the NSIS uninstaller can address the same folder).
+app.setPath('userData', path.join(app.getPath('appData'), 'TradingIntelligence'))
+const PATHS = resolveDataPaths({ appDir: APP_DIR, userDataDir: app.getPath('userData') })
 
 let serverProc = null
 let win = null
@@ -27,11 +37,17 @@ app.disableHardwareAcceleration()
 
 function log(line) {
   try {
-    fs.appendFileSync(path.join(LOG_DIR, 'desktop.log'), `[${new Date().toISOString()}] ${line}\n`)
+    fs.mkdirSync(PATHS.logDir, { recursive: true })
+    fs.appendFileSync(path.join(PATHS.logDir, 'desktop.log'), `[${new Date().toISOString()}] ${line}\n`)
   } catch {}
 }
 
-function startServer() {
+async function startServer() {
+  // Bring the trading database to the user-data location BEFORE the server
+  // starts (atomic migration + backups, see user-data.js).
+  const result = await ensureDatabase(PATHS, log)
+  log(`database state: ${result.status}`)
+
   serverProc = spawn(process.execPath, [path.join(SERVER_DIR, 'server.js')], {
     // standalone server expects its own directory as cwd so that
     // public/ (incl. the installer download endpoint) resolves correctly
@@ -42,10 +58,12 @@ function startServer() {
       NODE_ENV: 'production',
       PORT: String(PORT),
       HOSTNAME: HOST,
-      DATABASE_URL: 'file:' + DB_FILE,
+      DATABASE_URL: 'file:' + PATHS.dbFile.replace(/\\/g, '/'),
+      PTI_DATA_DIR: PATHS.dataDir,
+      PTI_TOKEN_FILE: PATHS.tokenFile,
+      PTI_LOG_DIR: PATHS.logDir,
       PTI_PYTHON: PY_EXE,
       PTI_SYNC_SCRIPT: SYNC_SCRIPT,
-      PTI_LOG_DIR: LOG_DIR,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
@@ -129,11 +147,12 @@ if (!gotLock) {
   })
 
   app.whenReady().then(async () => {
+    log('app starting — preparing user data + launching bundled server')
     try {
-      fs.mkdirSync(LOG_DIR, { recursive: true })
-    } catch {}
-    log('app starting — launching bundled server')
-    startServer()
+      await startServer()
+    } catch (err) {
+      log(`ERROR: server bootstrap failed: ${err && err.message}`)
+    }
     try {
       await waitForServer()
       log('server healthy — opening window')

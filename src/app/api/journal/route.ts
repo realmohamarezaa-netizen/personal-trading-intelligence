@@ -1,15 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import type { JournalResponse, JournalTrade, RangeKey } from '@/lib/types'
+import { resolveActiveAccount } from '@/lib/server-data'
+import { journalQuerySchema } from '@/lib/validation'
+import type { JournalResponse, JournalTrade } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
 
-const RANGE_MS: Record<Exclude<RangeKey, 'all'>, number> = {
-  '7d': 7 * 864e5,
-  '30d': 30 * 864e5,
-  '90d': 90 * 864e5,
-  '180d': 180 * 864e5,
-}
+const EPS = 0.0001
 
 function parseJsonArray(s: string | null): string[] {
   if (!s) return []
@@ -24,42 +21,69 @@ function parseJsonArray(s: string | null): string[] {
 export async function GET(req: NextRequest) {
   try {
     const sp = req.nextUrl.searchParams
-    const range = (sp.get('range') ?? 'all') as RangeKey
-    const symbol = sp.get('symbol')
-    const result = sp.get('result') // win | loss | be
-    const mistake = sp.get('mistake')
-    const q = sp.get('q')
-    const status = sp.get('status') // OPEN | CLOSED | null(all)
-    const limit = Math.min(Number(sp.get('limit') ?? 400), 1000)
+    const q = journalQuerySchema.safeParse({
+      range: sp.get('range') ?? 'all',
+      status: sp.get('status') ?? 'ALL',
+      result: sp.get('result') ?? 'ALL',
+      mistake: sp.get('mistake') ?? 'ALL',
+      emotion: sp.get('emotion') ?? 'ALL',
+      symbol: sp.get('symbol') ?? 'ALL',
+      strategyId: sp.get('strategyId') ?? 'ALL',
+      q: sp.get('q') ?? '',
+      limit: sp.get('limit') ?? 200,
+      from: sp.get('from') ?? undefined,
+      to: sp.get('to') ?? undefined,
+      accountId: sp.get('accountId') ?? undefined,
+    })
+    if (!q.success) {
+      return NextResponse.json({ error: 'INVALID_QUERY', issues: q.error.issues.slice(0, 3) }, { status: 400 })
+    }
+    const { range, status, result, mistake, emotion, symbol, strategyId, queryText, limit, from, to, accountId } = {
+      ...q.data,
+      queryText: q.data.q,
+    }
 
-    const from =
-      range === 'all' ? null : new Date(Date.now() - RANGE_MS[range as Exclude<RangeKey, 'all'>])
+    const account = await resolveActiveAccount(accountId)
+    if (!account) return NextResponse.json({ error: 'NO_ACCOUNT' }, { status: 404 })
 
-    const where: Record<string, unknown> = {}
-    if (symbol) where.symbol = symbol
+    const RANGE_MS: Record<string, number> = { '7d': 7, '30d': 30, '90d': 90, '180d': 180 }
+    const closeFrom =
+      from ? new Date(from) : range !== 'all' && RANGE_MS[range] ? new Date(Date.now() - RANGE_MS[range] * 864e5) : null
+    const closeTo = to ? new Date(to) : null
+
+    const where: Record<string, unknown> = { accountId: account.id }
     if (status === 'OPEN' || status === 'CLOSED') where.status = status
-    if (from) where.closeTime = { gte: from }
+    if (symbol && symbol !== 'ALL') where.symbol = symbol
+    if (strategyId && strategyId !== 'ALL') where.strategyId = strategyId
+    const timeCond: { gte?: Date; lte?: Date } = {}
+    if (closeFrom) timeCond.gte = closeFrom
+    if (closeTo) timeCond.lte = closeTo
+    if (Object.keys(timeCond).length) where.closeTime = timeCond
 
     let trades = await db.trade.findMany({
       where,
       orderBy: [{ closeTime: 'desc' }, { openTime: 'desc' }],
-      take: 2000,
+      take: 4000,
+      include: { strategy: { select: { name: true } } },
     })
 
-    // Post-filters that SQL where cannot express on JSON columns
-    if (result === 'win') trades = trades.filter((t) => t.status === 'CLOSED' && t.netProfit > 0.0001)
-    else if (result === 'loss') trades = trades.filter((t) => t.status === 'CLOSED' && t.netProfit < -0.0001)
-    else if (result === 'be') trades = trades.filter((t) => t.status === 'CLOSED' && Math.abs(t.netProfit) <= 0.0001)
+    // Post-filters that SQL cannot express on JSON columns
+    if (result === 'WIN') trades = trades.filter((t) => t.status === 'CLOSED' && t.netProfit > EPS)
+    else if (result === 'LOSS') trades = trades.filter((t) => t.status === 'CLOSED' && t.netProfit < -EPS)
+    else if (result === 'BE') trades = trades.filter((t) => t.status === 'CLOSED' && Math.abs(t.netProfit) <= EPS)
 
-    if (mistake) trades = trades.filter((t) => parseJsonArray(t.mistakes).includes(mistake))
-    if (q) {
-      const needle = q.toLowerCase()
+    if (mistake && mistake !== 'ALL') trades = trades.filter((t) => parseJsonArray(t.mistakes).includes(mistake))
+    if (emotion && emotion !== 'ALL') trades = trades.filter((t) => t.emotion === emotion)
+    if (queryText) {
+      const needle = queryText.toLowerCase()
       trades = trades.filter(
         (t) =>
           t.symbol.toLowerCase().includes(needle) ||
           (t.notes ?? '').toLowerCase().includes(needle) ||
           (t.emotion ?? '').toLowerCase().includes(needle) ||
-          String(t.positionId).includes(needle)
+          (t.mt5Comment ?? '').toLowerCase().includes(needle) ||
+          String(t.positionId ?? '').includes(needle) ||
+          String(t.positionTicket ?? '').includes(needle)
       )
     }
 
@@ -67,6 +91,8 @@ export async function GET(req: NextRequest) {
     const page: JournalTrade[] = trades.slice(0, limit).map((t) => ({
       id: t.id,
       positionId: t.positionId,
+      positionTicket: t.positionTicket !== null ? t.positionTicket.toString() : null,
+      dealTicket: t.dealTicket !== null ? t.dealTicket.toString() : null,
       symbol: t.symbol,
       direction: t.direction === 'SELL' ? 'SELL' : 'BUY',
       volume: t.volume,
@@ -76,6 +102,8 @@ export async function GET(req: NextRequest) {
       closePrice: t.closePrice,
       stopLoss: t.stopLoss,
       takeProfit: t.takeProfit,
+      initialStopLoss: t.initialStopLoss,
+      riskAmount: t.riskAmount,
       commission: t.commission,
       swap: t.swap,
       profit: t.profit,
@@ -84,6 +112,11 @@ export async function GET(req: NextRequest) {
       rMultiple: t.rMultiple,
       holdingMinutes: t.holdingMinutes,
       status: t.status,
+      incompleteHistory: t.incompleteHistory,
+      magicNumber: t.magicNumber !== null ? t.magicNumber.toString() : null,
+      mt5Comment: t.mt5Comment,
+      strategyId: t.strategyId,
+      strategyName: t.strategy?.name ?? null,
       mistakes: parseJsonArray(t.mistakes),
       emotion: t.emotion,
       notes: t.notes,

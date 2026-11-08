@@ -20,13 +20,21 @@ import {
   Square,
 } from 'lucide-react'
 import type { SettingsResponse } from '@/lib/types'
-import { fetchDownloadInfo, fetchMt5Status, fetchSettings, launchMt5Connector, reseedDemoData, stopMt5Connector } from '@/lib/api-client'
-import { fmtBytes, fmtDateTime, fmtMoney } from '@/lib/format'
+import { COMMON_TIMEZONES } from '@/lib/types'
+import { fetchDownloadInfo, fetchMt5Status, fetchSettings, launchMt5Connector, reseedDemoData, stopMt5Connector, updateSettingsTimezone } from '@/lib/api-client'
+import { currencySymbol, fmtBytes, fmtDateTime, fmtMoney } from '@/lib/format'
 import { APP_VERSION, INSTALLER_EXE_FILE_NAME, INSTALLER_FILE_NAME } from '@/lib/app-info'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   Table,
   TableBody,
@@ -63,6 +71,67 @@ function KV({ label, children }: { label: string; children: ReactNode }) {
 function Code({ children }: { children: ReactNode }) {
   return (
     <code className="rounded bg-muted/60 px-1.5 py-0.5 text-[11px] text-foreground/90">{children}</code>
+  )
+}
+
+/** Trading-day timezone selector (P2.8) — persists on the active account. */
+function TimezoneSelect({ current }: { current: string }) {
+  const { toast } = useToast()
+  const queryClient = useQueryClient()
+  const save = useMutation({
+    mutationFn: (tz: string) => updateSettingsTimezone(tz),
+    onSuccess: () => {
+      toast({ title: 'Timezone updated', description: 'روز معاملاتی و Daily Drawdown بر اساس منطقهٔ زمانی جدید محاسبه می‌شود.' })
+      queryClient.invalidateQueries({ queryKey: ['settings'] })
+      queryClient.invalidateQueries({ queryKey: ['analytics'] })
+      queryClient.invalidateQueries({ queryKey: ['journal'] })
+    },
+    onError: (err: Error) => {
+      toast({ title: 'Timezone update failed', description: err.message, variant: 'destructive' })
+    },
+  })
+  return (
+    <Select value={current} onValueChange={(v) => save.mutate(v)}>
+      <SelectTrigger size="sm" className="h-6 w-[170px] text-[11px]" aria-label="Trading-day timezone">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {COMMON_TIMEZONES.map((tz) => (
+          <SelectItem key={tz} value={tz} className="num text-xs">
+            {tz}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )
+}
+
+/** Real database location + size from the running server (P0 diagnostics). */
+function DbPathInfo() {
+  const { data: st } = useQuery({
+    queryKey: ['mt5-status'],
+    queryFn: fetchMt5Status,
+    refetchInterval: 30_000,
+  })
+  if (!st?.data?.dbFile) {
+    return (
+      <code className="rounded bg-muted/60 px-1.5 py-0.5 text-[11px] text-foreground/80">
+        {process.env.NEXT_PUBLIC_PTI_DEV_DB ?? 'db/custom.db'}
+      </code>
+    )
+  }
+  return (
+    <span className="flex flex-col items-end gap-0.5">
+      <code
+        className="max-w-[260px] truncate rounded bg-muted/60 px-1.5 py-0.5 text-[11px] text-foreground/80"
+        title={st.data.dbFile}
+      >
+        {st.data.dbFile}
+      </code>
+      <span className="num text-[10px] text-muted-foreground">
+        {fmtBytes(st.data.dbSizeBytes)} · {st.data.snapshotCount.toLocaleString('en-US')} snapshots
+      </span>
+    </span>
   )
 }
 
@@ -292,7 +361,7 @@ export function SettingsSection() {
 
   const { data, isLoading, isError, error, refetch, isRefetching } = useQuery({
     queryKey: ['settings'],
-    queryFn: fetchSettings,
+    queryFn: () => fetchSettings(),
   })
 
   const reseed = useMutation({
@@ -383,7 +452,24 @@ export function SettingsSection() {
               <KV label="Leverage">
                 <span className="num">1:{data.account.leverage}</span>
               </KV>
-              <KV label="Initial Balance">{fmtMoney(data.account.initialBalance)}</KV>
+              <KV label="Initial Balance">{fmtMoney(data.account.initialBalance, { currency: data.account.currency })}</KV>
+              <KV label="Trade Mode">
+                <Badge
+                  className={cn(
+                    'border-transparent',
+                    data.account.tradeMode === 'DEMO'
+                      ? 'bg-[var(--warn)]/15 text-[var(--warn)]'
+                      : data.account.tradeMode === 'CONTEST'
+                        ? 'bg-[var(--info)]/15 text-[var(--info)]'
+                        : 'bg-[var(--pos)]/15 text-[var(--pos)]'
+                  )}
+                >
+                  {data.account.tradeMode}
+                </Badge>
+              </KV>
+              <KV label="Trading-day timezone">
+                <TimezoneSelect current={data.account.timezone} />
+              </KV>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 {data.demoMode ? (
                   <Badge className="border-transparent bg-[var(--warn)]/15 text-[var(--warn)]">
@@ -400,6 +486,41 @@ export function SettingsSection() {
                   Last sync: <span className="num">{fmtDateTime(data.lastSyncAt)}</span>
                 </span>
               </div>
+              {data.accounts.length > 1 && (
+                <div className="mt-3 border-t border-border/60 pt-3">
+                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Accounts ({data.accounts.length}) — demo and real accounts stay fully separate
+                  </p>
+                  <div className="space-y-1.5">
+                    {data.accounts.map((a) => (
+                      <div key={a.id} className="flex items-center justify-between gap-2 rounded-lg border border-border/60 bg-muted/20 px-2.5 py-1.5">
+                        <div className="min-w-0">
+                          <span className="truncate text-xs font-medium">{a.name}</span>
+                          <span className="num ml-2 text-[10px] text-muted-foreground">
+                            {a.mt5Login ?? '—'} · {a.server}
+                          </span>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          <span className="num text-[10px] text-muted-foreground">{a.trades} trades</span>
+                          <Badge
+                            className={cn(
+                              'border-transparent text-[10px]',
+                              a.tradeMode === 'REAL'
+                                ? 'bg-[var(--pos)]/15 text-[var(--pos)]'
+                                : 'bg-[var(--warn)]/15 text-[var(--warn)]'
+                            )}
+                          >
+                            {a.tradeMode}
+                          </Badge>
+                          {a.isActive && (
+                            <Badge className="border-transparent bg-primary/15 text-[10px] text-primary">active</Badge>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </Panel>
 
             <Panel title="Data Store" description="آمار پایگاه داده محلی">
@@ -416,7 +537,7 @@ export function SettingsSection() {
                 <span className="num">{data.counts.cashflows.toLocaleString('en-US')}</span>
               </KV>
               <KV label="DB Path">
-                <code className="rounded bg-muted/60 px-1.5 py-0.5 text-[11px] text-foreground/80">db/custom.db</code>
+                <DbPathInfo />
               </KV>
             </Panel>
           </div>
@@ -462,17 +583,16 @@ export function SettingsSection() {
                 account.
               </li>
               <li>
-                In the MT5 toolbar, turn <span className="font-medium text-foreground">Algo Trading</span>{' '}
-                <span className="text-[var(--pos)] font-semibold">ON</span> — the green button at the top of the
-                terminal. The connector needs it active to attach to the terminal.
-              </li>
-              <li>
                 Click the green <span className="font-medium text-foreground">Connect MT5</span> button above.
               </li>
               <li>
                 Done — trades, balance and equity sync automatically and stay updated every 45 seconds.
               </li>
             </ol>
+            <p className="mt-3 text-xs leading-relaxed text-muted-foreground/80">
+              نکته: کانکتور <span className="font-medium text-foreground">فقط-خواندنی</span> است و برای اتصال
+              نیازی به فعال‌کردن Algo Trading در متاتریدر ندارد — هیچ سفارشی اجرا نمی‌شود.
+            </p>
             <p className="mt-3 text-xs leading-relaxed text-muted-foreground/80">
               Developer / web mode only: install Python 3.12 (64-bit) +{' '}
               <Code>pip install MetaTrader5 requests</Code>, then run{' '}

@@ -2,30 +2,54 @@
 # ─── Personal Trading Intelligence — Windows installer build (Linux host) ────
 # Assembles the Electron app package and compiles the NSIS installer.
 #
-# Prerequisites (already verified by the sandbox):
-#   - bun, node, sharp (in project node_modules)
-#   - makensis extracted at /home/z/nsis-root  (dpkg -x nsis_*.deb)
-#   - /home/z/electron-win32-x64.zip           (electron-v33.x win32-x64)
-#   - python-embed.zip                         (Python 3.12 embeddable win64)
-#   - /home/z/py-wheels/*.whl                  (MetaTrader5 + requests for win)
+# v1.3.0 guarantees:
+#   * NO database of any kind ships inside the installer — user data is
+#     created at runtime in the user-data directory and migrated on demand.
+#     (The build FAILS if a custom.db sneaks into the payload.)
+#   * The version comes from ONE source of truth: src/lib/app-info.ts.
+#   * All tool paths are overridable via env vars and missing prerequisites
+#     fail with an explicit message.
 #
-# Usage: NEXT_DIST_DIR=.next-desktop bash desktop-build/build-installer.sh <version>
-# Prereq: run `NEXT_DIST_DIR=.next-desktop bun run build` first (output: "standalone"
-# mode is expected — .next-desktop/standalone plus .next/static and public/ are
-# assembled below). Using a separate dist dir keeps the dev server's .next intact.
+# Environment overrides:
+#   ELECTRON_ZIP   (default /home/z/electron-win32-x64.zip)
+#   PY_EMBED_ZIP   (default $ROOT/python-embed.zip)
+#   WHEELS_DIR     (default /home/z/py-wheels)
+#   MAKENSIS       (default /home/z/nsis-root/usr/bin/makensis)
+#   NSISDIR        (default /home/z/nsis-root/usr/share/nsis)
+#   STAGE_DIR      (default /home/z/pti-stage)
+#
+# Prereq: run `NEXT_DIST_DIR=.next-desktop bun run build` first.
+# Usage: NEXT_DIST_DIR=.next-desktop bash desktop-build/build-installer.sh [version]
 
 set -euo pipefail
 exec 2>&1
 
-VERSION="${1:-1.2.0}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+fail() { echo "BUILD ERROR: $*" >&2; exit 1; }
+
+# ─── Version: single source of truth ─────────────────────────────────────────
+VERSION="${1:-}"
+if [ -z "$VERSION" ]; then
+  VERSION="$(grep -E "^export const APP_VERSION" "$ROOT/src/lib/app-info.ts" | grep -oE "[0-9]+\.[0-9]+\.[0-9]+" || true)"
+fi
+[ -n "$VERSION" ] || fail "could not determine version — pass it as arg 1 or check src/lib/app-info.ts"
+echo "=== Version: $VERSION (from src/lib/app-info.ts) ==="
+
+# ─── Tool paths (overridable, verified with explicit errors) ─────────────────
 NEXT_DIST="$ROOT/${NEXT_DIST_DIR:-.next}"
-STAGE=/home/z/pti-stage
-ELECTRON_ZIP=/home/z/electron-win32-x64.zip
-PY_EMBED_ZIP="$ROOT/python-embed.zip"
-WHEELS=/home/z/py-wheels
-MAKENSIS=/home/z/nsis-root/usr/bin/makensis
-export NSISDIR=/home/z/nsis-root/usr/share/nsis
+STAGE="${STAGE_DIR:-/home/z/pti-stage}"
+ELECTRON_ZIP="${ELECTRON_ZIP:-/home/z/electron-win32-x64.zip}"
+PY_EMBED_ZIP="${PY_EMBED_ZIP:-$ROOT/python-embed.zip}"
+WHEELS="${WHEELS_DIR:-/home/z/py-wheels}"
+MAKENSIS="${MAKENSIS:-/home/z/nsis-root/usr/bin/makensis}"
+export NSISDIR="${NSISDIR:-/home/z/nsis-root/usr/share/nsis}"
+
+[ -d "$NEXT_DIST/standalone" ] || fail "missing $NEXT_DIST/standalone — run: NEXT_DIST_DIR=${NEXT_DIST_DIR:-.next-desktop} bun run build"
+[ -f "$ELECTRON_ZIP" ]         || fail "missing Electron win32-x64 zip ($ELECTRON_ZIP) — set ELECTRON_ZIP"
+[ -f "$PY_EMBED_ZIP" ]         || fail "missing Python embeddable zip ($PY_EMBED_ZIP) — set PY_EMBED_ZIP"
+[ -d "$WHEELS" ] && ls "$WHEELS"/*.whl >/dev/null 2>&1 || fail "missing MT5 wheels dir ($WHEELS) — set WHEELS_DIR"
+[ -x "$MAKENSIS" ]             || fail "missing makensis at $MAKENSIS — set MAKENSIS"
 
 echo "=== [1/8] Clean stage ==="
 rm -rf "$STAGE"
@@ -56,9 +80,10 @@ cd "$STAGE"
 unzip -q "$ELECTRON_ZIP" -d "$STAGE/app"
 mv "$STAGE/app/electron.exe" "$STAGE/app/TradingIntelligence.exe"
 
-echo "=== [4/8] App payload (main.js, package.json, db, connector) ==="
+echo "=== [4/8] App payload (main.js, package.json, user-data module, connector) ==="
 APP="$STAGE/app/resources/app"
 cp "$ROOT/desktop-build/main.js" "$APP/main.js"
+cp "$ROOT/desktop-build/user-data.js" "$APP/user-data.js"
 cp "$ROOT/desktop-build/app-package.json" "$APP/package.json"
 python3 - "$VERSION" <<'EOF'
 import json, sys
@@ -67,9 +92,14 @@ d = json.load(open(p))
 d['version'] = sys.argv[1]
 json.dump(d, open(p, 'w'), indent=2)
 EOF
-mkdir -p "$APP/db" "$APP/connector"
-cp "$ROOT/db/custom.db" "$APP/db/custom.db"
-cp "$ROOT/mt5-connector/sync.py" "$ROOT/mt5-connector/sync_service.py" "$APP/connector/"
+mkdir -p "$APP/connector"
+cp "$ROOT/mt5-connector/sync.py" "$ROOT/mt5-connector/sync_service.py" "$ROOT/mt5-connector/mt5_shim.py" "$APP/connector/"
+
+# ─── DATA-SAFETY ASSERTION: no developer/private database may ship ──────────
+if [ -e "$APP/db" ]; then
+  fail "refusing to ship: payload contains a 'db' folder ($APP/db) — the installer must never bundle a database"
+fi
+echo "=== payload contains NO database ✓ ==="
 
 echo "=== [5/8] Icons ==="
 node "$ROOT/desktop-build/make-icons.mjs" "$ROOT/desktop-build/icon.svg" "$APP"
@@ -92,7 +122,6 @@ done
 echo "=== [7/8] NSIS script (version $VERSION) ==="
 cp "$ROOT/desktop-build/README-fa.txt" "$STAGE/README-fa.txt"
 cd "$STAGE"
-sed -i "s/!define APPVER  \".*\"/!define APPVER  \"$VERSION\"/" installer.nsi 2>/dev/null || true
 cp "$ROOT/desktop-build/installer.nsi" "$STAGE/installer.nsi"
 sed -i "s/!define APPVER  \".*\"/!define APPVER  \"$VERSION\"/" "$STAGE/installer.nsi"
 

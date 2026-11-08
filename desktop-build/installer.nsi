@@ -1,10 +1,16 @@
 ; ─── Personal Trading Intelligence — Windows installer (NSIS) ────────────────
+; v1.3.0: the trading database lives in %APPDATA%\TradingIntelligence\data
+; (per-user, OUTSIDE the program folder). The uninstaller therefore never
+; touches trading data unless the user EXPLICITLY confirms full deletion —
+; default answer is "keep data".
+
 Unicode true
 !include "MUI2.nsh"
 
 !define APPNAME "Personal Trading Intelligence"
 !define APPVER  "1.2.0"
 !define UNINSTKEY "TradingIntelligence"
+!define DATADIR "$APPDATA\TradingIntelligence"
 
 Name "${APPNAME} ${APPVER}"
 OutFile "PTI-Setup-${APPVER}.exe"
@@ -31,7 +37,8 @@ ShowInstDetails show
 Section "Install"
   SetOutPath "$INSTDIR"
 
-  ; Application payload (Electron shell + server + python + connector + db)
+  ; Application payload (Electron shell + server + python + connector).
+  ; NOTE: no database is shipped — user data is created in the user-data dir.
   File /r "app/*"
   File "README-fa.txt"
 
@@ -64,24 +71,32 @@ Section "Install"
 SectionEnd
 
 Section "Uninstall"
-  ; Keep the user's trading data unless they explicitly say no.
-  MessageBox MB_YESNO|MB_ICONQUESTION "Keep your trading data (the db folder)?$\n$\nداده‌های معاملاتی شما (پوشهٔ db) حفظ شود؟" IDYES keepdata
+  ; ── Program files: always removed ──
+  Delete "$INSTDIR\Uninstall.exe"
+  RMDir /r "$INSTDIR\resources"
+  Delete "$INSTDIR\TradingIntelligence.exe"
+  Delete "$INSTDIR\README-fa.txt"
+  Delete "$SMPROGRAMS\${APPNAME}\${APPNAME}.lnk"
+  Delete "$SMPROGRAMS\${APPNAME}\Uninstall ${APPNAME}.lnk"
+  RMDir  "$SMPROGRAMS\${APPNAME}"
+  Delete "$DESKTOP\${APPNAME}.lnk"
+  DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${UNINSTKEY}"
+  DeleteRegKey HKCU "Software\${UNINSTKEY}"
+  RMDir "$INSTDIR"
 
-    RMDir /r "$INSTDIR"
-    Goto done
+  ; ── Trading data: removed ONLY with explicit confirmation ──
+  ; Default button is "No" → uninstalling normally KEEPS the user's data in
+  ; %APPDATA%\TradingIntelligence (database, backups, logs) and also keeps a
+  ; legacy v1.2.x database inside the old program folder if one exists.
+  MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 \
+    "Also delete your trading data?$\n$\nاطلاعات معاملاتی شما نیز حذف شود؟$\n$\nYes = delete ALL data   /   No = KEEP data (default)$\n$\nData location: ${DATADIR}\data\custom.db" \
+    IDNO keep_data
 
-  keepdata:
-    RMDir /r "$INSTDIR\resources"
-    Delete "$INSTDIR\TradingIntelligence.exe"
-    Delete "$INSTDIR\README-fa.txt"
+    RMDir /r "${DATADIR}"
+    RMDir /r "$INSTDIR\resources\app\db"   ; legacy v1.2.x database location
+    RMDir /r "$INSTDIR\logs"               ; legacy v1.2.x log location
 
-  done:
-    Delete "$INSTDIR\Uninstall.exe"
-    Delete "$SMPROGRAMS\${APPNAME}\${APPNAME}.lnk"
-    Delete "$SMPROGRAMS\${APPNAME}\Uninstall ${APPNAME}.lnk"
-    RMDir  "$SMPROGRAMS\${APPNAME}"
-    Delete "$DESKTOP\${APPNAME}.lnk"
-    DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${UNINSTKEY}"
-    DeleteRegKey HKCU "Software\${UNINSTKEY}"
-    RMDir "$INSTDIR"
+  keep_data:
+    ; Leave ${DATADIR} and any legacy data exactly as they are.
+    DetailPrint "Trading data kept in ${DATADIR}"
 SectionEnd

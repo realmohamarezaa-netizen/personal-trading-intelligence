@@ -52,7 +52,7 @@ def _err(msg: str) -> None:
     print(f"[{now}] ERROR: {msg}", file=sys.stderr, flush=True)
 
 
-def build_service_args(api: str, days: int) -> argparse.Namespace:
+def build_service_args(api: str, days: int, token: Optional[str] = None) -> argparse.Namespace:
     """An argparse.Namespace shaped exactly like sync.py's parse_args output."""
     ns = argparse.Namespace()
     ns.api = api
@@ -60,6 +60,7 @@ def build_service_args(api: str, days: int) -> argparse.Namespace:
     ns.login = None
     ns.password = None
     ns.server = None
+    ns.token = token
     ns.watch = None
     ns.test = False
     return ns
@@ -89,6 +90,10 @@ def parse_service_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
         "--interval", type=float, default=45.0, help="Seconds between sync cycles"
     )
     parser.add_argument(
+        "--token", default=None,
+        help="Sync token issued by the dashboard (sent as X-PTI-Token)",
+    )
+    parser.add_argument(
         "--max-down", type=int, default=3,
         help="Exit after the dashboard health check fails this many times in a row",
     )
@@ -97,10 +102,11 @@ def parse_service_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
 
 def main(argv: Optional[list[str]] = None) -> int:
     opts = parse_service_args(argv)
-    args = build_service_args(opts.api, opts.days)
+    args = build_service_args(opts.api, opts.days, opts.token)
     _log(
         f"MT5 sync service started (pid {os.getpid()}) — api={opts.api} "
         f"interval={opts.interval:g}s history={opts.days}d "
+        f"auth={'token' if opts.token else 'none'} "
         f"python={sys.version.split()[0]} (read-only, exits when the dashboard closes)"
     )
 
