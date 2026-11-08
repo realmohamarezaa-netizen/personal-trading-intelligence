@@ -181,44 +181,43 @@ function SidebarBody({
 }) {
   return (
     <>
-      <div
-        className={cn(
-          'flex items-center gap-3 pb-4 pt-6',
-          collapsed ? 'justify-center px-2' : 'justify-between px-5'
-        )}
-      >
-        <div className={cn('flex min-w-0 items-center gap-3', collapsed && 'justify-center')}>
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
-            <Activity className="h-5 w-5" />
-          </div>
-          {!collapsed && (
+      {/* Brand header — v1.3.3: NOT rendered while the rail is collapsed, so
+          the closed toolbar starts straight with the section icons (the pulse
+          logo no longer floats above them). Expansion stays available through
+          the bottom PanelLeftOpen button and Ctrl+B. */}
+      {!collapsed && (
+        <div className="flex items-center justify-between gap-3 px-5 pb-4 pt-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
+              <Activity className="h-5 w-5" />
+            </div>
             <div className="min-w-0">
               <div className="text-[13px] font-bold tracking-wide">TRADE ANALYTICS</div>
               <div className="text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
                 Personal Intelligence
               </div>
             </div>
-          )}
+          </div>
+          {onClose ? (
+            <button
+              onClick={onClose}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
+              aria-label="Close menu"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          ) : onToggle ? (
+            <button
+              onClick={onToggle}
+              className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground lg:flex"
+              aria-label="Collapse sidebar"
+              title="Collapse sidebar (Ctrl+B)"
+            >
+              <PanelLeftClose className="h-4 w-4" />
+            </button>
+          ) : null}
         </div>
-        {onClose ? (
-          <button
-            onClick={onClose}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
-            aria-label="Close menu"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        ) : onToggle ? (
-          <button
-            onClick={onToggle}
-            className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground lg:flex"
-            aria-label="Collapse sidebar"
-            title="Collapse sidebar (Ctrl+B)"
-          >
-            <PanelLeftClose className="h-4 w-4" />
-          </button>
-        ) : null}
-      </div>
+      )}
 
       {!collapsed && (
         <div className="mx-4 mb-3 inline-flex w-fit items-center gap-1.5 rounded-full border border-border/70 bg-muted/30 px-2.5 py-1 text-[10px] font-semibold tracking-widest text-muted-foreground">
@@ -228,7 +227,10 @@ function SidebarBody({
       )}
 
       <nav
-        className={cn('flex-1 space-y-0.5 overflow-y-auto py-2 scroll-slim', collapsed ? 'px-2' : 'px-3')}
+        className={cn(
+          'flex-1 space-y-0.5 overflow-y-auto scroll-slim',
+          collapsed ? 'px-2 pt-5 pb-2' : 'px-3 py-2'
+        )}
         aria-label="Sections"
       >
         {SECTIONS.map((s) => {
@@ -328,7 +330,9 @@ function friendlyError(err: unknown): string {
 
 function AppInner() {
   const [section, setSection] = useState<SectionKey>('overview')
-  const [range, setRange] = useState<RangeKey>('all')
+  // v1.3.3: 'all' (Entire history) removed from the selector — default to the
+  // broadest remaining window (Last 6 months)
+  const [range, setRange] = useState<RangeKey>('6m')
   const [symbol, setSymbol] = useState('')
   const [accountId, setAccountId] = useState('')
   // Custom window (range === 'custom'); defaults cover the last 30 days
