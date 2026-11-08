@@ -1,37 +1,36 @@
 <svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- PTI v1.3.4 app icon — chrome sphere with chromatic-aberration rim -->
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#121b16"/>
-      <stop offset="1" stop-color="#090d0b"/>
-    </linearGradient>
+    <radialGradient id="sphere" cx="0.44" cy="0.30" r="0.85">
+      <stop offset="0" stop-color="#fbfbfb"/>
+      <stop offset="0.22" stop-color="#c9c9c9"/>
+      <stop offset="0.50" stop-color="#7d7d7d"/>
+      <stop offset="0.78" stop-color="#2e2e2e"/>
+      <stop offset="1" stop-color="#0c0c0c"/>
+    </radialGradient>
+    <filter id="soft" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="3"/>
+    </filter>
+    <filter id="softer" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="6"/>
+    </filter>
   </defs>
-  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
-  <rect x="12" y="12" width="488" height="488" rx="102" fill="none" stroke="#1d3a2c" stroke-width="8"/>
 
-  <!-- grid -->
-  <g stroke="#16221b" stroke-width="4">
-    <line x1="92" y1="128" x2="420" y2="128"/>
-    <line x1="92" y1="222" x2="420" y2="222"/>
-    <line x1="92" y1="316" x2="420" y2="316"/>
-    <line x1="92" y1="410" x2="420" y2="410"/>
+  <rect width="512" height="512" fill="#000000"/>
+
+  <!-- chromatic aberration rim: blue top, magenta lower-left, green lower-right -->
+  <g fill="none" stroke-linecap="round">
+    <path d="M 92 161 A 190 190 0 0 1 420 161" stroke="#2b46ff" stroke-width="8" opacity="0.9" filter="url(#softer)"/>
+    <path d="M 161 420 A 190 190 0 0 1 69 223" stroke="#e0186e" stroke-width="7" opacity="0.8" filter="url(#softer)"/>
+    <path d="M 443 223 A 190 190 0 0 1 289 443" stroke="#22c55e" stroke-width="7" opacity="0.8" filter="url(#softer)"/>
   </g>
 
-  <!-- candles -->
-  <g stroke-linecap="round">
-    <line x1="138" y1="248" x2="138" y2="404" stroke="#16a34a" stroke-width="14" opacity="0.6"/>
-    <rect x="112" y="292" width="52" height="78" rx="12" fill="#22c55e"/>
-    <line x1="220" y1="196" x2="220" y2="368" stroke="#16a34a" stroke-width="14" opacity="0.6"/>
-    <rect x="194" y="238" width="52" height="86" rx="12" fill="#22c55e"/>
-    <line x1="302" y1="150" x2="302" y2="336" stroke="#be123c" stroke-width="14" opacity="0.6"/>
-    <rect x="276" y="198" width="52" height="92" rx="12" fill="#f43f5e"/>
-    <line x1="384" y1="108" x2="384" y2="306" stroke="#16a34a" stroke-width="14" opacity="0.6"/>
-    <rect x="358" y="152" width="52" height="108" rx="12" fill="#4ade80"/>
-  </g>
+  <!-- chrome sphere -->
+  <circle cx="256" cy="256" r="185" fill="url(#sphere)"/>
 
-  <!-- rising equity line -->
-  <path d="M100 384 L184 316 L252 348 L342 218 L404 136"
-        fill="none" stroke="#ecfdf5" stroke-width="17"
-        stroke-linecap="round" stroke-linejoin="round" opacity="0.95"/>
-  <circle cx="404" cy="136" r="24" fill="#ecfdf5"/>
-  <circle cx="404" cy="136" r="10" fill="#22c55e"/>
+  <!-- depth: dark contact shadow at the lower edge -->
+  <circle cx="256" cy="256" r="184" fill="none" stroke="#000000" stroke-opacity="0.6" stroke-width="8" filter="url(#soft)"/>
+
+  <!-- faint top rim light -->
+  <path d="M 148 122 A 176 176 0 0 1 366 124" fill="none" stroke="#ffffff" stroke-opacity="0.28" stroke-width="3" filter="url(#soft)"/>
 </svg>

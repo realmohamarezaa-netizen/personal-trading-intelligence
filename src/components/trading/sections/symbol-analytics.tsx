@@ -106,7 +106,7 @@ export function SymbolSection({
         {directions.map((d) => (
           <Card
             key={d.direction}
-            className="glow-line border-border/70 bg-card/80 backdrop-blur-sm"
+            className="glow-line border-border/70 bg-card/90"
           >
             <CardContent className="p-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -259,7 +259,7 @@ export function SymbolSection({
                   cursor={CURSOR}
                   formatter={(v) => money(Number(v))}
                 />
-                <Bar dataKey="netPnl" radius={[3, 3, 0, 0]} maxBarSize={26}>
+                <Bar dataKey="netPnl" radius={[3, 3, 0, 0]} maxBarSize={26} isAnimationActive={false}>
                   {byPnl.map((s) => (
                     <Cell key={s.symbol} fill={s.netPnl >= 0 ? CHART.pos : CHART.neg} />
                   ))}
@@ -292,7 +292,7 @@ export function SymbolSection({
                   formatter={(v) => money(Number(v))}
                 />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar dataKey="buyPnl" name="Buy P/L" stackId="a" fill={CHART.pos} maxBarSize={26} />
+                <Bar dataKey="buyPnl" name="Buy P/L" stackId="a" fill={CHART.pos} maxBarSize={26} isAnimationActive={false} />
                 <Bar
                   dataKey="sellPnl"
                   name="Sell P/L"
@@ -300,6 +300,7 @@ export function SymbolSection({
                   fill={CHART.neg}
                   radius={[3, 3, 0, 0]}
                   maxBarSize={26}
+                  isAnimationActive={false}
                 />
               </BarChart>
             </ResponsiveContainer>

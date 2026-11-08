@@ -207,7 +207,7 @@ export function TimeSection({ data }: { data: AnalyticsData }) {
                 formatter={(v) => money(Number(v))}
                 labelFormatter={(h) => `${fmtHour(Number(h))} Tehran`}
               />
-              <Bar dataKey="pnl" radius={[3, 3, 0, 0]} maxBarSize={22}>
+              <Bar dataKey="pnl" radius={[3, 3, 0, 0]} maxBarSize={22} isAnimationActive={false}>
                 {activeHours.map((h) => (
                   <Cell key={h.hour} fill={h.pnl >= 0 ? CHART.pos : CHART.neg} />
                 ))}
@@ -262,7 +262,7 @@ export function TimeSection({ data }: { data: AnalyticsData }) {
               formatter={(v) => money(Number(v))}
               labelFormatter={(n) => `${n} (Tehran week)`}
             />
-            <Bar dataKey="pnl" radius={[3, 3, 0, 0]} maxBarSize={36}>
+            <Bar dataKey="pnl" radius={[3, 3, 0, 0]} maxBarSize={36} isAnimationActive={false}>
               {time.dayStats.map((d) => (
                 <Cell key={d.day} fill={d.pnl >= 0 ? CHART.pos : CHART.neg} />
               ))}

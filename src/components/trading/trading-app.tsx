@@ -3,6 +3,9 @@
 // ─── Application Shell — sidebar, topbar, footer, section routing ────────────
 // v1.3.2: live MT5 awareness (status polling, honest sync badge, auto-follow
 // terminal account switches), collapsible desktop sidebar + mobile drawer.
+// v1.3.4: the desktop rail now appears from `md` up (was `lg`) so the app
+// behaves like a desktop tool in the ~1000px windows used next to MT5, and
+// the whole shell is denser at narrow widths (smaller paddings/type).
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -209,7 +212,7 @@ function SidebarBody({
           ) : onToggle ? (
             <button
               onClick={onToggle}
-              className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground lg:flex"
+              className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground md:flex"
               aria-label="Collapse sidebar"
               title="Collapse sidebar (Ctrl+B)"
             >
@@ -525,7 +528,7 @@ function AppInner() {
           initial={false}
           animate={{ width: collapsed ? SIDEBAR_W_COLLAPSED : SIDEBAR_W }}
           transition={{ duration: 0.28, ease: [0.4, 0, 0.2, 1] }}
-          className="fixed inset-y-0 left-0 z-40 hidden flex-col overflow-hidden border-r border-sidebar-border bg-sidebar lg:flex"
+          className="fixed inset-y-0 left-0 z-40 hidden flex-col overflow-hidden border-r border-sidebar-border bg-sidebar md:flex"
         >
           <div
             className="flex h-full w-full flex-col"
@@ -557,7 +560,7 @@ function AppInner() {
         {/* ── Mobile drawer ── */}
         <AnimatePresence>
           {drawerOpen && (
-            <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label="Navigation">
+            <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true" aria-label="Navigation">
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -596,17 +599,17 @@ function AppInner() {
         <div
           className={cn(
             'flex min-w-0 flex-1 flex-col transition-[padding] duration-300 ease-in-out',
-            collapsed ? 'lg:pl-[72px]' : 'lg:pl-[238px]'
+            collapsed ? 'md:pl-[72px]' : 'md:pl-[238px]'
           )}
         >
           {/* Topbar */}
-          <header className="sticky top-0 z-30 border-b border-border/60 bg-background/85 backdrop-blur-md">
-            <div className="mx-auto flex h-14 max-w-[1500px] items-center justify-between gap-2 px-3 sm:gap-3 md:px-6">
+          <header className="sticky top-0 z-30 border-b border-border/60 bg-background">
+            <div className="mx-auto flex h-12 max-w-[1500px] items-center justify-between gap-2 px-3 sm:gap-3 lg:h-14 lg:px-6">
               <div className="flex min-w-0 items-center gap-1.5">
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 shrink-0 lg:hidden"
+                  className="h-8 w-8 shrink-0 md:hidden"
                   onClick={() => setDrawerOpen(true)}
                   aria-label="Open navigation menu"
                 >
@@ -648,7 +651,7 @@ function AppInner() {
           </header>
 
           {/* Content */}
-          <main className="mx-auto w-full max-w-[1500px] flex-1 p-3 sm:p-4 md:p-6">
+          <main className="mx-auto w-full max-w-[1500px] flex-1 p-3 sm:p-4 lg:p-6">
             {isLoading ? (
               // First load (no previous data to keep): structural skeleton
               <DashboardSkeleton />

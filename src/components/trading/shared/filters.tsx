@@ -58,7 +58,7 @@ export function RangeFilter({
             aria-selected={value === r}
             onClick={() => onChange(r)}
             className={cn(
-              'num rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
+              'num rounded-md px-2 py-0.5 text-[11px] font-medium transition-colors sm:px-2.5 sm:py-1 sm:text-xs',
               value === r
                 ? 'bg-primary/15 text-primary'
                 : 'text-muted-foreground hover:text-foreground'

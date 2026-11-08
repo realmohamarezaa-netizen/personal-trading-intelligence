@@ -25,17 +25,20 @@ export function Panel({
   bodyClassName?: string
 }) {
   return (
-    <Card className={cn('border-border/70 bg-card/80 backdrop-blur-sm glow-line', className)}>
+    // v1.3.4: solid card background (no backdrop-blur) — blur is the heaviest
+    // paint op in the desktop shell (GPU accel is disabled there) and made
+    // chart-heavy pages feel sluggish. Visually identical on the dark base.
+    <Card className={cn('border-border/70 bg-card/90 glow-line', className)}>
       {(title || actions) && (
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 px-4 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 px-3 py-2.5 sm:px-4 sm:py-3">
           <div className="min-w-0">
-            {title && <h3 className="text-sm font-semibold tracking-tight">{title}</h3>}
-            {description && <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>}
+            {title && <h3 className="text-[13px] font-semibold tracking-tight sm:text-sm">{title}</h3>}
+            {description && <p className="mt-0.5 text-[11px] text-muted-foreground sm:text-xs">{description}</p>}
           </div>
           {actions && <div className="flex items-center gap-2">{actions}</div>}
         </div>
       )}
-      <CardContent className={cn('p-4', bodyClassName)}>{children}</CardContent>
+      <CardContent className={cn('p-3 sm:p-4', bodyClassName)}>{children}</CardContent>
     </Card>
   )
 }
@@ -67,14 +70,14 @@ export function StatCard({
             ? 'text-[var(--info)]'
             : 'text-foreground'
   return (
-    <Card className={cn('border-border/70 bg-card/80 backdrop-blur-sm', className)}>
-      <CardContent className="p-4">
+    <Card className={cn('border-border/70 bg-card/90', className)}>
+      <CardContent className="p-3 sm:p-4">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{label}</span>
+          <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground lg:text-[11px]">{label}</span>
           {icon && <span className="text-muted-foreground/70">{icon}</span>}
         </div>
-        <div className={cn('num mt-2 text-xl font-semibold sm:text-2xl', toneClass)}>{value}</div>
-        {sub && <div className="mt-1 text-xs text-muted-foreground">{sub}</div>}
+        <div className={cn('num mt-1.5 text-lg font-semibold sm:text-xl lg:text-2xl', toneClass)}>{value}</div>
+        {sub && <div className="mt-0.5 text-[11px] text-muted-foreground lg:text-xs">{sub}</div>}
       </CardContent>
     </Card>
   )
@@ -119,10 +122,10 @@ export function SectionHeader({
   children?: ReactNode
 }) {
   return (
-    <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+    <div className="mb-3 flex flex-wrap items-end justify-between gap-2 lg:mb-4 lg:gap-3">
       <div>
-        <h2 className="text-lg font-semibold tracking-tight sm:text-xl">{title}</h2>
-        {subtitle && <p className="mt-0.5 text-xs text-muted-foreground sm:text-sm">{subtitle}</p>}
+        <h2 className="text-base font-semibold tracking-tight sm:text-lg lg:text-xl">{title}</h2>
+        {subtitle && <p className="mt-0.5 text-[11px] text-muted-foreground sm:text-xs lg:text-sm">{subtitle}</p>}
       </div>
       {children && <div className="flex flex-wrap items-center gap-2">{children}</div>}
     </div>

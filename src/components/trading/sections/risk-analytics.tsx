@@ -169,6 +169,7 @@ export function RiskSection({ data }: { data: AnalyticsData }) {
                 stroke={CHART.neg}
                 strokeWidth={1.5}
                 fill="url(#underwaterFill)"
+                isAnimationActive={false}
               />
             </AreaChart>
           </ResponsiveContainer>

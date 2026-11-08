@@ -19,7 +19,7 @@ function Sh({ className, style }: { className?: string; style?: CSSProperties })
 // KPI tile placeholder — matches StatCard geometry
 function KpiSkeleton({ i }: { i: number }) {
   return (
-    <Card className="border-border/70 bg-card/80 backdrop-blur-sm">
+    <Card className="border-border/70 bg-card/90">
       <CardContent className="p-4">
         <div className="flex items-center justify-between">
           <Sh className="h-3 w-20" />
@@ -102,7 +102,7 @@ export function DashboardSkeleton() {
 
       {/* Charts row */}
       <div className="grid gap-4 lg:grid-cols-5">
-        <Card className="border-border/70 bg-card/80 backdrop-blur-sm lg:col-span-3">
+        <Card className="border-border/70 bg-card/90 lg:col-span-3">
           <CardContent className="p-4">
             <div className="mb-4 flex items-center justify-between">
               <Sh className="h-4 w-36" />
@@ -111,7 +111,7 @@ export function DashboardSkeleton() {
             <BarsSkeleton />
           </CardContent>
         </Card>
-        <Card className="border-border/70 bg-card/80 backdrop-blur-sm lg:col-span-2">
+        <Card className="border-border/70 bg-card/90 lg:col-span-2">
           <CardContent className="p-4">
             <div className="mb-4">
               <Sh className="h-4 w-28" />
@@ -122,7 +122,7 @@ export function DashboardSkeleton() {
       </div>
 
       {/* List / table */}
-      <Card className="border-border/70 bg-card/80 backdrop-blur-sm">
+      <Card className="border-border/70 bg-card/90">
         <CardContent className="p-4">
           <div className="mb-4 flex items-center justify-between">
             <Sh className="h-4 w-24" />
