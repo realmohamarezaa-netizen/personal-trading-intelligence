@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import fs from 'fs'
 import path from 'path'
 import { db } from '@/lib/db'
+import { resolveActiveAccount } from '@/lib/server-data'
 
 export const dynamic = 'force-dynamic'
 
@@ -9,6 +10,9 @@ export const dynamic = 'force-dynamic'
 // Answers "why does the dashboard show no data yet" without leaving the app:
 //   - is the bundled connector configured and actually running?
 //   - did any real MT5 sync arrive (account carries mt5 login)?
+//   - WHICH account is the connector currently pushing (the account of the
+//     most recent MT5_SYNC log) — lets the dashboard follow terminal account
+//     switches and show an honest sync badge.
 //   - what does the connector's own log file say (last lines)?
 //
 // The connector (spawned by /api/mt5/launch) writes stdout+stderr into
@@ -55,12 +59,23 @@ export async function GET() {
     const scriptPath = process.env.PTI_SYNC_SCRIPT
     const bundled = Boolean(pythonExe && scriptPath && fs.existsSync(pythonExe) && fs.existsSync(scriptPath))
 
-    const account = await db.account.findFirst()
-    const accountSynced = Boolean(account && account.id !== 'demo' && account.mt5Login)
-    const awaitingFirstSync = Boolean(account && account.id !== 'demo' && !account.mt5Login)
+    // The account the connector is CURRENTLY syncing = account of the latest
+    // MT5_SYNC entry. When the user switches accounts inside the MetaTrader 5
+    // terminal, the next cycle pushes the new identity here — the dashboard
+    // compares this with what it displays and follows automatically.
+    const lastSync = await db.syncLog.findFirst({
+      where: { source: 'MT5_SYNC' },
+      orderBy: { ts: 'desc' },
+      include: { account: true },
+    })
+    const active =
+      lastSync?.account ??
+      (await resolveActiveAccount().catch(() => null))
 
-    const [lastSyncLog, lastLaunchLog, snapCount] = await Promise.all([
-      db.syncLog.findFirst({ where: { source: 'MT5_SYNC' }, orderBy: { ts: 'desc' } }),
+    const accountSynced = Boolean(active && active.id !== 'demo' && active.mt5Login)
+    const awaitingFirstSync = Boolean(active && active.id !== 'demo' && !active.mt5Login)
+
+    const [lastLaunchLog, snapCount] = await Promise.all([
       db.syncLog.findFirst({ where: { source: 'DESKTOP_LAUNCH' }, orderBy: { ts: 'desc' } }),
       db.equitySnapshot.count().catch(() => 0),
     ])
@@ -91,8 +106,20 @@ export async function GET() {
       tokenProtected: Boolean(process.env.PTI_SYNC_TOKEN || process.env.PTI_TOKEN_FILE),
       accountSynced,
       awaitingFirstSync,
-      tradeMode: account?.tradeMode ?? null,
-      lastSyncLog: shape(lastSyncLog),
+      tradeMode: active?.tradeMode ?? null,
+      // ── account-switch awareness (v1.3.2) ──
+      activeAccount: active
+        ? {
+            id: active.id,
+            name: active.name,
+            mt5Login: active.mt5Login,
+            server: active.server,
+            tradeMode: active.tradeMode,
+          }
+        : null,
+      lastSyncAt: lastSync?.ts.toISOString() ?? null,
+      lastSyncStatus: lastSync?.status ?? null,
+      lastSyncLog: shape(lastSync ?? null),
       lastLaunchLog: shape(lastLaunchLog),
       logTail: tailFile(logFile),
       logFile,

@@ -5,6 +5,7 @@
 import type { RangeKey } from '@/lib/types'
 import { RANGE_LABELS } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { CalendarDays } from 'lucide-react'
 import {
   Select,
   SelectContent,
@@ -32,10 +33,20 @@ export function RangeFilter({
   customTo?: string
   onCustomChange?: (from: string, to: string) => void
 }) {
+  const customWindowDays =
+    value === 'custom' && customFrom && customTo
+      ? Math.max(
+          1,
+          Math.round(
+            (Date.parse(`${customTo}T23:59:59`) - Date.parse(`${customFrom}T00:00:00`)) / 864e5
+          )
+        )
+      : null
+
   return (
     <div className={cn('flex flex-wrap items-center gap-1.5', className)}>
       <div
-        className="inline-flex items-center gap-0.5 rounded-lg border border-border/70 bg-muted/40 p-0.5"
+        className="inline-flex max-w-full flex-wrap items-center gap-0.5 rounded-lg border border-border/70 bg-muted/40 p-0.5"
         role="tablist"
         aria-label="Time range"
       >
@@ -57,13 +68,18 @@ export function RangeFilter({
         ))}
       </div>
       {value === 'custom' && onCustomChange && (
-        <div className="flex items-center gap-1.5">
+        <div
+          className="inline-flex items-center gap-1.5 rounded-lg border border-primary/25 bg-primary/5 px-2 py-1"
+          role="group"
+          aria-label="Custom date window"
+        >
+          <CalendarDays className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
           <input
             type="date"
             value={customFrom ?? ''}
             max={customTo || undefined}
             onChange={(e) => onCustomChange(e.target.value, customTo ?? '')}
-            className="num h-7 rounded-md border border-border/70 bg-muted/40 px-2 text-xs text-foreground [color-scheme:dark]"
+            className="num h-6 rounded-md border border-border/70 bg-muted/40 px-1.5 text-xs text-foreground [color-scheme:dark]"
             aria-label="Custom range start"
           />
           <span className="text-xs text-muted-foreground">→</span>
@@ -72,9 +88,14 @@ export function RangeFilter({
             value={customTo ?? ''}
             min={customFrom || undefined}
             onChange={(e) => onCustomChange(customFrom ?? '', e.target.value)}
-            className="num h-7 rounded-md border border-border/70 bg-muted/40 px-2 text-xs text-foreground [color-scheme:dark]"
+            className="num h-6 rounded-md border border-border/70 bg-muted/40 px-1.5 text-xs text-foreground [color-scheme:dark]"
             aria-label="Custom range end"
           />
+          {customWindowDays !== null && (
+            <span className="num hidden shrink-0 text-[10px] text-muted-foreground sm:inline">
+              {customWindowDays}d window
+            </span>
+          )}
         </div>
       )}
     </div>

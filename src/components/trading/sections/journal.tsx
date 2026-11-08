@@ -125,6 +125,9 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
   const [result, setResult] = useState<ResultKey>('')
   const [status, setStatus] = useState<StatusKey>('CLOSED')
   const [q, setQ] = useState('')
+  // Custom window (range === 'custom'); defaults cover the last 30 days
+  const [customFrom, setCustomFrom] = useState(() => new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10))
+  const [customTo, setCustomTo] = useState(() => new Date().toISOString().slice(0, 10))
 
   const filters = useMemo(
     () => ({
@@ -134,8 +137,10 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
       status: (status || undefined) as 'OPEN' | 'CLOSED' | undefined,
       accountId: data.account.id,
       q: q || undefined,
+      from: range === 'custom' ? customFrom : undefined,
+      to: range === 'custom' ? `${customTo}T23:59:59` : undefined,
     }),
-    [range, symbol, result, status, q, data.account.id]
+    [range, symbol, result, status, q, data.account.id, customFrom, customTo]
   )
 
   // keepPreviousData: filter changes keep the current table visible (dimmed)
@@ -237,7 +242,16 @@ export function JournalSection({ data }: { data: AnalyticsData }) {
 
       {/* Filter bar */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <RangeFilter value={range} onChange={setRange} />
+        <RangeFilter
+          value={range}
+          onChange={setRange}
+          customFrom={customFrom}
+          customTo={customTo}
+          onCustomChange={(f, t) => {
+            if (f) setCustomFrom(f)
+            if (t) setCustomTo(t)
+          }}
+        />
         <DimensionFilter
           label="Symbol"
           value={symbol}

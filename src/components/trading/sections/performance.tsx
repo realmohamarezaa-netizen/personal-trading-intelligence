@@ -66,12 +66,18 @@ export function PerformanceSection({
   onRange,
   symbol,
   onSymbol,
+  customFrom,
+  customTo,
+  onCustomChange,
 }: {
   data: AnalyticsData
   range: RangeKey
   onRange: (r: RangeKey) => void
   symbol: string
   onSymbol: (s: string) => void
+  customFrom: string
+  customTo: string
+  onCustomChange: (from: string, to: string) => void
 }) {
   const perf = data.performance
   const currency = data.account.currency
@@ -211,7 +217,13 @@ export function PerformanceSection({
         title="Performance Analytics"
         subtitle="آناتومی عملکرد — از سود ناخالص تا امید ریاضی هر معامله"
       >
-        <RangeFilter value={range} onChange={onRange} />
+        <RangeFilter
+          value={range}
+          onChange={onRange}
+          customFrom={customFrom}
+          customTo={customTo}
+          onCustomChange={onCustomChange}
+ />
         <DimensionFilter
           label="Symbol"
           value={symbol}

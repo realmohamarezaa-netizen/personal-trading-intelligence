@@ -110,10 +110,16 @@ export function OverviewSection({
   data,
   range,
   onRange,
+  customFrom,
+  customTo,
+  onCustomChange,
 }: {
   data: AnalyticsData
   range: RangeKey
   onRange: (r: RangeKey) => void
+  customFrom: string
+  customTo: string
+  onCustomChange: (from: string, to: string) => void
 }) {
   const o = data.overview
   const currency = data.account.currency
@@ -276,7 +282,13 @@ export function OverviewSection({
         title="Overview"
         subtitle="مرکز کنترل حساب — نگاه لحظه‌ای به وضعیت معاملاتی"
       >
-        <RangeFilter value={range} onChange={onRange} />
+        <RangeFilter
+          value={range}
+          onChange={onRange}
+          customFrom={customFrom}
+          customTo={customTo}
+          onCustomChange={onCustomChange}
+        />
       </SectionHeader>
 
       {/* ── KPI row ── */}

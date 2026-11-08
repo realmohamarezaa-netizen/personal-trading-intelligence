@@ -138,6 +138,16 @@ export interface Mt5Status {
   accountSynced: boolean
   awaitingFirstSync: boolean
   tradeMode: string | null
+  /** account the connector is currently pushing (latest MT5_SYNC) */
+  activeAccount: {
+    id: string
+    name: string
+    mt5Login: string | null
+    server: string | null
+    tradeMode: string
+  } | null
+  lastSyncAt: string | null
+  lastSyncStatus: string | null
   lastSyncLog: { ts: string; source: string; status: string; message: string } | null
   lastLaunchLog: { ts: string; source: string; status: string; message: string } | null
   logTail: string | null

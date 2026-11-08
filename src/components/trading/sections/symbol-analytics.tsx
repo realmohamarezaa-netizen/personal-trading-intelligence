@@ -61,10 +61,16 @@ export function SymbolSection({
   data,
   range,
   onRange,
+  customFrom,
+  customTo,
+  onCustomChange,
 }: {
   data: AnalyticsData
   range: RangeKey
   onRange: (r: RangeKey) => void
+  customFrom: string
+  customTo: string
+  onCustomChange: (from: string, to: string) => void
 }) {
   const currency = data.account.currency
   const money = (n: number | null | undefined, opts?: { sign?: boolean; decimals?: number }) =>
@@ -86,7 +92,13 @@ export function SymbolSection({
         title="Symbol Analytics"
         subtitle="هر نماد یک شخصیت است — کدام نماد برایت پول می‌سازد؟"
       >
-        <RangeFilter value={range} onChange={onRange} />
+        <RangeFilter
+          value={range}
+          onChange={onRange}
+          customFrom={customFrom}
+          customTo={customTo}
+          onCustomChange={onCustomChange}
+        />
       </SectionHeader>
 
       {/* ── Buy vs Sell hero ── */}
