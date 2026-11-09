@@ -112,7 +112,9 @@ export function fmtDateTime(iso: string | null | undefined): string {
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
-    hour12: false,
+    // h23 (NOT hour12:false): en-GB + hour12:false can render midnight as
+    // "24:xx" on some ICU builds — hourCycle keeps a clean 00-23 range.
+    hourCycle: 'h23',
   }).format(new Date(iso))
 }
 
@@ -132,7 +134,7 @@ export function fmtTime(iso: string | null | undefined): string {
     timeZone: 'Asia/Tehran',
     hour: '2-digit',
     minute: '2-digit',
-    hour12: false,
+    hourCycle: 'h23',
   }).format(new Date(iso))
 }
 

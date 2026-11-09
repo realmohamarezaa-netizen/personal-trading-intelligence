@@ -69,7 +69,7 @@ const SECTIONS: { key: SectionKey; label: string; fa: string; icon: typeof Activ
 
 const SIDEBAR_W = 238
 const SIDEBAR_W_COLLAPSED = 72
-/** connector syncs every ~45s — a sync older than this means it stalled */
+/** connector syncs every ~30s — a sync older than this means it stalled */
 const SYNC_FRESH_MS = 180_000
 
 function TehranClock() {
@@ -80,7 +80,9 @@ function TehranClock() {
       hour: '2-digit',
       minute: '2-digit',
       second: '2-digit',
-      hour12: false,
+      // h23 (NOT hour12:false): en-GB with hour12:false renders midnight as
+      // "24:xx" on several ICU builds — hourCycle forces a clean 00-23 range.
+      hourCycle: 'h23',
     })
     const tick = () => setNow(fmt.format(new Date()))
     tick()
@@ -394,14 +396,18 @@ function AppInner() {
   const queryClient = useQueryClient()
   const { toast } = useToast()
 
-  // ── Live MT5 connector status (10s poll) ──────────────────────────────────
+  // ── Live MT5 connector status (5s poll) ───────────────────────────────────
   // Drives the honest sync badge, the auto-follow on terminal account
   // switches, and the "connector down → restart" affordance.
+  // v1.4.0: refetchIntervalInBackground — this is a dashboard that typically
+  // sits NEXT TO the MT5 terminal; when the browser tab loses focus the
+  // polling must NOT pause, otherwise the badge and data freeze silently.
   const { data: mt5Status } = useQuery({
     queryKey: ['mt5-status'],
     queryFn: () => fetchMt5Status(),
-    refetchInterval: 10_000,
-    staleTime: 8_000,
+    refetchInterval: 5_000,
+    refetchIntervalInBackground: true,
+    staleTime: 4_000,
   })
 
   // connector alive = process running OR a sync landed recently (covers a
@@ -421,8 +427,11 @@ function AppInner() {
   // keepPreviousData: while a new range/symbol is fetched the previous
   // dataset stays on screen (dimmed below) instead of the whole page
   // collapsing into a spinner — switching feels instant, data just updates.
-  // While the connector is alive the dashboard polls too (30s): floating P/L,
-  // open positions and new deals arrive with every connector sync cycle.
+  // While the connector is alive the dashboard polls every 10s (v1.4.0, was
+  // 30s): floating P/L, open positions and new deals arrive with every
+  // connector sync cycle (~30s), so the worst-case freshness is now ~40s
+  // instead of ~75s. refetchIntervalInBackground keeps the dashboard live
+  // even when the tab is in the background behind the MT5 terminal.
   // TanStack structural sharing keeps identical payloads referentially
   // stable, so charts do NOT re-animate when nothing actually changed.
   const { data, isLoading, isError, error, refetch, isRefetching, isPlaceholderData } = useQuery({
@@ -436,7 +445,9 @@ function AppInner() {
         to: range === 'custom' ? `${customTo}T23:59:59` : undefined,
       }),
     placeholderData: keepPreviousData,
-    refetchInterval: connectorLive ? 30_000 : false,
+    refetchInterval: connectorLive ? 10_000 : false,
+    refetchIntervalInBackground: true,
+    staleTime: 5_000,
   })
 
   const demoMode = data?.meta.demoMode ?? true

@@ -120,7 +120,9 @@ export async function POST(_req: NextRequest) {
           scriptPath,
           '--api', `http://127.0.0.1:${port}`,
           '--days', '365',
-          '--interval', '45',
+          // v1.4.0: 45s → 30s — floating P/L and open positions must feel live;
+          // the cycle is cheap (idempotent upserts, only deltas change rows).
+          '--interval', '30',
           ...(tokenFile ? ['--token', token] : []),
         ],
         { cwd: path.dirname(scriptPath), stdio: ['ignore', out, out] },
@@ -157,7 +159,7 @@ export async function POST(_req: NextRequest) {
         accountId: shell.id,
         source: 'DESKTOP_LAUNCH',
         status: 'OK',
-        message: `Bundled connector started (pid ${child.pid ?? '?'}, token-protected) — syncing every 45s`,
+        message: `Bundled connector started (pid ${child.pid ?? '?'}, token-protected) — syncing every 30s`,
         tradesInserted: 0,
         tradesUpdated: 0,
       },
@@ -169,7 +171,7 @@ export async function POST(_req: NextRequest) {
       wipedDemo,
       message: wipedDemo
         ? 'Demo data removed — syncing your real MT5 account now (first import may take up to a minute).'
-        : 'Connector started — your MT5 account syncs every 45 seconds.',
+        : 'Connector started — your MT5 account syncs every 30 seconds.',
     } satisfies LaunchResult)
   } catch (err) {
     console.error('[api/mt5/launch]', err)

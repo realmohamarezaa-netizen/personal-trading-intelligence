@@ -15,7 +15,7 @@ Connector → Diagnostics.
 Read-only: this service never places, modifies or closes any order.
 
 Usage (managed by the desktop app):
-    python.exe sync_service.py --api http://127.0.0.1:3517 --days 365 --interval 45
+    python.exe sync_service.py --api http://127.0.0.1:3517 --days 365 --interval 30
 """
 
 from __future__ import annotations
@@ -63,6 +63,7 @@ def build_service_args(api: str, days: int, token: Optional[str] = None) -> argp
     ns.token = token
     ns.watch = None
     ns.test = False
+    ns.server_offset_minutes = None  # v1.4.0: auto-detect the MT5 server UTC offset
     return ns
 
 
@@ -87,7 +88,7 @@ def parse_service_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     )
     parser.add_argument("--days", type=int, default=365, help="History depth in days")
     parser.add_argument(
-        "--interval", type=float, default=45.0, help="Seconds between sync cycles"
+        "--interval", type=float, default=30.0, help="Seconds between sync cycles"
     )
     parser.add_argument(
         "--token", default=None,

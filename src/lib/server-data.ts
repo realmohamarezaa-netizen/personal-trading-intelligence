@@ -74,7 +74,7 @@ export async function loadEngineInput(accountId?: string): Promise<EngineInput |
   const account = await resolveActiveAccount(accountId)
   if (!account) return null
 
-  // Snapshot downsampling: raw ~45s rows only for the last 7 days; beyond
+  // Snapshot downsampling: raw ~30s rows only for the last 7 days; beyond
   // that one row per day (mirrors the retention policy) so a year of usage
   // never loads hundreds of thousands of rows per analytics request.
   // NOTE: Prisma stores SQLite DateTime as integer ms — SQLite compares

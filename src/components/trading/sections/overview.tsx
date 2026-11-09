@@ -128,16 +128,52 @@ export function OverviewSection({
   const floatTone = pnlTone(o.floatingPnl)
 
   // Merge the realized balance curve with the connector's floating equity
-  // samples into one chart dataset (snapshot points may be sparse).
+  // samples into ONE continuous chart dataset.
+  // v1.4.0 — fixes the broken (segmented) rendering: snapshot-only rows used
+  // to carry balance=undefined and the Area split into gaps at every sample.
+  // The realized balance is a STEP function between events, so the last known
+  // balance is forward-filled over snapshot rows; the dashed equity line keeps
+  // connectNulls. Very long series are downsampled uniformly (always keeping
+  // the newest point) so the chart stays light and smooth.
   const chartRows = useMemo(() => {
-    const map = new Map<string, { t: string; balance?: number; snapshotEquity?: number }>()
-    for (const p of data.equityCurve) map.set(p.t, { t: p.t, balance: p.balance })
-    for (const p of data.equitySeries) {
-      const e = map.get(p.t)
-      if (e) e.snapshotEquity = p.equity
-      else map.set(p.t, { t: p.t, snapshotEquity: p.equity })
+    type Row = { t: string; balance?: number; snapshotEquity?: number; ddAbs?: number; ddPct?: number }
+    const pts = new Map<string, Row>()
+    for (const p of data.equityCurve) {
+      pts.set(p.t, { t: p.t, balance: p.balance, ddAbs: p.ddAbs, ddPct: p.ddPct })
     }
-    return [...map.values()].sort((a, b) => a.t.localeCompare(b.t))
+    for (const p of data.equitySeries) {
+      const e = pts.get(p.t)
+      if (e) {
+        if (e.snapshotEquity === undefined) e.snapshotEquity = p.equity
+      } else {
+        pts.set(p.t, { t: p.t, snapshotEquity: p.equity })
+      }
+    }
+    const rows = [...pts.values()].sort((a, b) => a.t.localeCompare(b.t))
+
+    // forward-fill: balance / drawdown persist until the next real event
+    let lastBal: number | undefined
+    let lastDdAbs = 0
+    let lastDdPct = 0
+    for (const r of rows) {
+      if (typeof r.balance === 'number') {
+        lastBal = r.balance
+        lastDdAbs = r.ddAbs ?? 0
+        lastDdPct = r.ddPct ?? 0
+      } else {
+        r.balance = lastBal
+        r.ddAbs = lastDdAbs
+        r.ddPct = lastDdPct
+      }
+    }
+
+    const MAX_POINTS = 1200
+    if (rows.length <= MAX_POINTS) return rows
+    const step = Math.ceil(rows.length / MAX_POINTS)
+    const out = rows.filter((_, i) => i % step === 0)
+    const newest = rows[rows.length - 1]
+    if (out.length && out[out.length - 1] !== newest) out.push(newest)
+    return out
   }, [data.equityCurve, data.equitySeries])
 
   // ── KPI cards ──
@@ -375,6 +411,7 @@ export function OverviewSection({
               strokeWidth={1.8}
               fill="url(#eqFill)"
               activeDot={{ r: 3, strokeWidth: 0 }}
+              connectNulls
               isAnimationActive={false}
             />
             {data.equitySeries.length > 0 && (

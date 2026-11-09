@@ -571,7 +571,7 @@ export function SettingsSection() {
                 Disconnect
               </Button>
               <span className="text-xs text-muted-foreground">
-                کانکتور فقط-خواندنی است؛ هر ۴۵ ثانیه به‌صورت خودکار همگام می‌شود و با بستن برنامه، خودش متوقف می‌گردد.
+                کانکتور فقط-خواندنی است؛ هر ۳۰ ثانیه به‌صورت خودکار همگام می‌شود و با بستن برنامه، خودش متوقف می‌گردد.
               </span>
             </div>
 
@@ -586,7 +586,7 @@ export function SettingsSection() {
                 Click the green <span className="font-medium text-foreground">Connect MT5</span> button above.
               </li>
               <li>
-                Done — trades, balance and equity sync automatically and stay updated every 45 seconds.
+                Done — trades, balance and equity sync automatically and stay updated every 30 seconds.
               </li>
             </ol>
             <p className="mt-3 text-xs leading-relaxed text-muted-foreground/80">

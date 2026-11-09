@@ -26,12 +26,22 @@ v1.3.0 semantics (matches prisma Trade model):
     actually succeeded — so the dashboard can treat the open-position set as
     authoritative and finalize stale OPEN rows it can no longer see.
 
+v1.4.0 timezone semantics:
+  * MT5 reports every epoch (deals, positions, ticks) in the BROKER SERVER's
+    timezone — NOT in UTC. Treating those epochs as UTC shifted every dashboard
+    time by the server offset (typically +2/+3h), so "Tehran" renderings were
+    wrong. The connector now auto-detects the server's real UTC offset from
+    fresh market ticks (DST-safe, re-detected every cycle) and converts all
+    timestamps to TRUE UTC before POSTing. A manual override is available via
+    ``--server-offset-minutes``.
+
 Usage:
     python sync.py --test                       # connect, print summary, send nothing
     python sync.py --days 180                   # one-shot sync of the last 180 days
     python sync.py --watch 60                   # keep syncing every 60 seconds
     python sync.py --login 12345 --password secret --server "Broker-Server"
     python sync.py --token <PTI sync token>     # authenticate against the dashboard
+    python sync.py --server-offset-minutes 180  # manual server UTC offset (auto by default)
 
 Read-only. This script never places, modifies or closes orders.
 """
@@ -78,7 +88,7 @@ _CASHFLOW_CATEGORY_BY_NAME = {
 }
 
 # Maximum positions whose full deal history we request per cycle to heal
-# pre-window entries (bounded latency for the 45s watch loop).
+# pre-window entries (bounded latency for the 30s watch loop).
 MAX_HEAL_PER_CYCLE = 150
 
 # Marker comment identifying reversed-position stub rows. MUST match
@@ -190,6 +200,64 @@ class PositionMeta:
         return None  # filled by the caller that owns the symbol specs
 
 
+# ─────────────────────── MT5 server-time offset (v1.4.0) ─────────────────────
+# MT5 reports all epochs in the BROKER SERVER's timezone. The real UTC offset
+# is auto-detected from the freshest market tick and subtracted on every
+# epoch -> datetime conversion, so the dashboard's Tehran clock matches the
+# terminal. Auto-detection runs every cycle (DST-safe); --server-offset-minutes
+# wins over it; on weekends without crypto quotes the last value sticks.
+SERVER_UTC_OFFSET_SECONDS = 0
+
+_OFFSET_CANDIDATE_SYMBOLS = (
+    # 24/7 crypto first — fresh ticks even on weekends; then liquid FX/metals
+    "BTCUSD", "ETHUSD", "XAUUSD", "EURUSD", "GBPUSD", "USDJPY",
+)
+
+
+def set_server_offset_minutes(minutes: Optional[int]) -> None:
+    """Install the detected/configured server UTC offset (module-global)."""
+    global SERVER_UTC_OFFSET_SECONDS
+    SERVER_UTC_OFFSET_SECONDS = int(minutes or 0) * 60
+
+
+def _fmt_offset(seconds: int) -> str:
+    sign = "+" if seconds >= 0 else "-"
+    total_min = abs(seconds) // 60
+    return f"UTC{sign}{total_min // 60:02d}:{total_min % 60:02d}"
+
+
+def detect_server_offset_minutes(max_tick_age: int = 420) -> Optional[int]:
+    """Auto-detect the MT5 server's UTC offset from fresh market ticks.
+
+    ``tick.time`` is a SERVER-time epoch while ``time.time()`` is real UTC,
+    so ``freshest_tick_time - now`` approximates the server offset (plus the
+    tick's age). Rounding to the nearest 15 minutes shakes the tick-age noise
+    off (real broker offsets are whole hours or :30). Returns None when no
+    tick is fresh enough (e.g. weekend without 24/7 symbols) — the caller
+    then keeps the previous offset (fail-safe, no silent time jumps).
+    """
+    if not HAVE_MT5:
+        return None
+    best_age: Optional[int] = None
+    best_offset: Optional[int] = None
+    now = int(time.time())
+    for name in _OFFSET_CANDIDATE_SYMBOLS:
+        try:
+            tick = mt5.symbol_info_tick(name)
+        except Exception:
+            tick = None
+        t = int(getattr(tick, "time", 0) or 0) if tick is not None else 0
+        if t <= 0:
+            continue
+        age = now - t
+        if best_age is None or age < best_age:
+            best_age = age
+            best_offset = t - now
+    if best_offset is None or best_age is None or best_age > max_tick_age:
+        return None
+    return (round(best_offset / 900) * 900) // 60
+
+
 # ─────────────────────────────── Small helpers ───────────────────────────────
 def _log(msg: str) -> None:
     print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}", flush=True)
@@ -208,8 +276,13 @@ def _num(value: Any, default: float = 0.0) -> float:
 
 
 def _from_epoch(seconds: Any) -> datetime:
-    """MT5 epoch seconds -> timezone-aware UTC datetime."""
-    return datetime.fromtimestamp(int(seconds or 0), tz=timezone.utc)
+    """MT5 SERVER-time epoch seconds -> timezone-aware TRUE-UTC datetime.
+
+    v1.4.0: MT5 epochs are expressed in the broker server's timezone, not in
+    UTC. The detected server UTC offset is subtracted here so every ISO
+    timestamp sent to the dashboard is real UTC and the dashboard's Tehran
+    rendering matches the terminal exactly."""
+    return datetime.fromtimestamp(int(seconds or 0) - SERVER_UTC_OFFSET_SECONDS, tz=timezone.utc)
 
 
 def _iso_z(dt: datetime) -> str:
@@ -669,6 +742,7 @@ def _print_test_summary(
     _log(f"Account : {account.name} | broker: {account.broker} | server: {account.server}")
     _log(f"          login {account.login} | currency {account.currency} | leverage 1:{account.leverage} | mode {account.tradeMode}")
     _log(f"Balance : {_num(info.balance):.2f} {account.currency} | equity: {_num(info.equity):.2f}")
+    _log(f"Server time zone      : {_fmt_offset(SERVER_UTC_OFFSET_SECONDS)} (subtracted from every timestamp)")
     _log(f"Open positions        : {position_count}")
     _log(f"History deals fetched : {deal_count}")
     _log(f"Closed legs: {leg_count} | cashflow entries: {cashflow_count}")
@@ -719,6 +793,32 @@ def run_sync(args: argparse.Namespace) -> bool:
         if mode_name == "DEMO":
             _log(f"connected to a DEMO account (login {info.login}) — its data stays fully separate from real accounts")
 
+        # ── MT5 server-time offset (v1.4.0) ─────────────────────────────────
+        # Deals/positions/ticks are epoch seconds in the BROKER SERVER's
+        # timezone. Detect the real UTC offset EVERY cycle (DST-safe) so all
+        # ISO timestamps sent to the dashboard are true UTC and the Tehran
+        # rendering matches the terminal. A manual --server-offset-minutes
+        # wins; when nothing is fresh enough (weekend, market closed) the
+        # previous value sticks — never a silent time jump.
+        if getattr(args, "server_offset_minutes", None) is not None:
+            set_server_offset_minutes(int(args.server_offset_minutes))
+            _log(f"server time offset: manual override {_fmt_offset(SERVER_UTC_OFFSET_SECONDS)}")
+        else:
+            detected = detect_server_offset_minutes()
+            if detected is None:
+                _log(
+                    "server time offset: no fresh tick available (market closed?) — "
+                    f"keeping {_fmt_offset(SERVER_UTC_OFFSET_SECONDS)}"
+                )
+            else:
+                changed = detected * 60 != SERVER_UTC_OFFSET_SECONDS
+                set_server_offset_minutes(detected)
+                if changed:
+                    _log(
+                        f"server time offset detected: {_fmt_offset(SERVER_UTC_OFFSET_SECONDS)} — "
+                        "dashboard times now match your terminal"
+                    )
+
         # ── Open positions (live) ────────────────────────────────────────
         # positions_get() returning a tuple (possibly EMPTY) is the complete,
         # authoritative truth about what is open RIGHT NOW. None means the
@@ -734,9 +834,15 @@ def run_sync(args: argparse.Namespace) -> bool:
             positions_read = True
 
         # ── Dealing history ──────────────────────────────────────────────────
+        # Window widened by ±1 day: deal epochs are SERVER-time based while
+        # `now` is real UTC, and the two can differ by the broker's offset
+        # (typically +2/+3h, up to ±14h). Re-import is idempotent so extra
+        # deals cost nothing — but MISSING the newest hours would hide live
+        # trades from the dashboard.
         now = datetime.now(timezone.utc)
-        date_from = now - timedelta(days=args.days)
-        deals_raw = mt5.history_deals_get(date_from, now)
+        date_from = now - timedelta(days=args.days + 1)
+        date_to = now + timedelta(days=1)
+        deals_raw = mt5.history_deals_get(date_from, date_to)
         if deals_raw is None:
             code, desc = mt5.last_error()
             _err(f"history_deals_get() failed: ({code}) {desc} — continuing without history")
@@ -924,6 +1030,13 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     parser.add_argument(
         "--token", default=None,
         help="Sync token issued by the dashboard (sent as X-PTI-Token)",
+    )
+    parser.add_argument(
+        "--server-offset-minutes", type=int, default=None, dest="server_offset_minutes",
+        help=(
+            "MT5 server UTC offset in minutes, e.g. 180 for UTC+3 (optional). "
+            "Default: auto-detect from fresh market ticks every cycle"
+        ),
     )
     parser.add_argument(
         "--watch", type=float, default=None, metavar="SECONDS",
