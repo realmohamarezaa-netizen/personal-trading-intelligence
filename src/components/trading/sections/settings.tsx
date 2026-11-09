@@ -7,6 +7,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Activity,
   AlertTriangle,
+  Check,
   CopyCheck,
   Download,
   ExternalLink,
@@ -55,6 +56,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 import { useToast } from '@/hooks/use-toast'
+import { THEMES, useTheme } from '@/lib/themes'
 import { Panel, SectionHeader } from '@/components/trading/shared/ui'
 
 // ─── Local helpers ────────────────────────────────────────────────────────────
@@ -287,6 +289,75 @@ function InstallerDownloadPanel() {
 }
 
 // ─── Section ──────────────────────────────────────────────────────────────────
+
+// v1.5.0 — theme gallery: four dark palettes with live mini previews.
+function AppearancePanel() {
+  const { theme, setTheme } = useTheme()
+  const { toast } = useToast()
+
+  return (
+    <Panel
+      title="Appearance — پوسته"
+      description="چهار تم تاریک؛ انتخاب شما ذخیره می‌شود و در اجرای بعدی هم اعمال می‌ماند"
+      className="mt-4"
+    >
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" role="radiogroup" aria-label="Theme">
+        {THEMES.map((t) => {
+          const active = theme === t.key
+          return (
+            <button
+              key={t.key}
+              role="radio"
+              aria-checked={active}
+              onClick={() => {
+                setTheme(t.key)
+                toast({ title: `Theme: ${t.name}`, description: `پوستهٔ «${t.fa}» فعال شد.` })
+              }}
+              className={cn(
+                'group relative overflow-hidden rounded-xl border text-left transition-all',
+                active
+                  ? 'border-primary/60 ring-2 ring-primary/40'
+                  : 'border-border/70 hover:border-primary/30'
+              )}
+              style={{ background: t.swatch.bg }}
+            >
+              {/* mini dashboard preview */}
+              <div aria-hidden className="flex h-20 flex-col gap-1.5 p-2.5">
+                <div className="flex items-center gap-1">
+                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: t.swatch.primary }} />
+                  <span className="h-1.5 w-8 rounded-full opacity-30" style={{ background: t.swatch.primary }} />
+                </div>
+                <div className="flex flex-1 items-end gap-1">
+                  <span className="w-2 rounded-sm" style={{ height: '38%', background: t.swatch.accent, opacity: 0.55 }} />
+                  <span className="w-2 rounded-sm" style={{ height: '66%', background: t.swatch.primary }} />
+                  <span className="w-2 rounded-sm" style={{ height: '48%', background: t.swatch.accent, opacity: 0.8 }} />
+                  <span className="w-2 rounded-sm" style={{ height: '86%', background: t.swatch.primary }} />
+                </div>
+                <span className="h-1.5 w-12 rounded-full opacity-25" style={{ background: t.swatch.primary }} />
+              </div>
+              <div
+                className="flex items-center justify-between gap-1 px-2.5 py-2"
+                style={{ background: 'oklch(1 0 0 / 4%)' }}
+              >
+                <div className="min-w-0">
+                  <div className="truncate text-xs font-semibold text-foreground">{t.name}</div>
+                  <div className="truncate text-[10px] text-muted-foreground" dir="rtl">
+                    {t.fa}
+                  </div>
+                </div>
+                {active && (
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                    <Check className="h-3 w-3" aria-hidden />
+                  </span>
+                )}
+              </div>
+            </button>
+          )
+        })}
+      </div>
+    </Panel>
+  )
+}
 
 // ─── MT5 connector diagnostics (live status + connector log tail) ───────────
 
@@ -541,6 +612,8 @@ export function SettingsSection() {
               </KV>
             </Panel>
           </div>
+
+          <AppearancePanel />
 
           {/* MT5 Connector */}
           <Panel

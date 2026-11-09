@@ -1,13 +1,11 @@
 // ─── Shared domain types for Personal Trading Intelligence ───────────────────
 
-// MT5-style report periods (matching the MetaTrader 5 history window list)
+// Dashboard report periods (v1.5.0): calendar-aligned windows — Today,
+// This week, This month, All time — plus an explicit Custom window.
 export type RangeKey =
   | 'today'
-  | '3d'
   | 'week'
   | 'month'
-  | '3m'
-  | '6m'
   | 'all'
   | 'custom'
 export type Direction = 'BUY' | 'SELL'
@@ -15,12 +13,9 @@ export type TradeMode = 'REAL' | 'DEMO' | 'CONTEST'
 
 export const RANGE_LABELS: Record<RangeKey, string> = {
   today: 'Today',
-  '3d': 'Last 3 days',
-  week: 'Last week',
-  month: 'Last month',
-  '3m': 'Last 3 months',
-  '6m': 'Last 6 months',
-  all: 'Entire history',
+  week: 'This week',
+  month: 'This month',
+  all: 'All time',
   custom: 'Custom',
 }
 

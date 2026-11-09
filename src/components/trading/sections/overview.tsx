@@ -350,8 +350,8 @@ export function OverviewSection({
           <AreaChart data={chartRows} margin={{ top: 6, right: 6, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id="eqFill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={CHART.info} stopOpacity={0.25} />
-                <stop offset="100%" stopColor={CHART.info} stopOpacity={0} />
+                <stop offset="0%" stopColor="var(--primary)" stopOpacity={0.25} />
+                <stop offset="100%" stopColor="var(--primary)" stopOpacity={0} />
               </linearGradient>
             </defs>
             <CartesianGrid stroke={CHART.grid} vertical={false} />
@@ -407,7 +407,7 @@ export function OverviewSection({
             <Area
               type="monotone"
               dataKey="balance"
-              stroke={CHART.info}
+              stroke="var(--primary)"
               strokeWidth={1.8}
               fill="url(#eqFill)"
               activeDot={{ r: 3, strokeWidth: 0 }}

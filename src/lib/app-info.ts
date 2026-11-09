@@ -1,7 +1,7 @@
 // ─── Application identity — single source of truth for version & downloads ───
 
 export const APP_NAME = 'Personal Trading Intelligence'
-export const APP_VERSION = '1.4.0'
+export const APP_VERSION = '1.5.0'
 
 /** The .exe inside the downloadable package */
 export const INSTALLER_EXE_FILE_NAME = `PTI-Setup-${APP_VERSION}.exe`

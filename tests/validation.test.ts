@@ -75,12 +75,14 @@ describe('sync payload validation (P5)', () => {
 })
 
 describe('journal / analytics / settings query validation', () => {
-  test('range whitelist (MT5-style periods)', () => {
+  test('range whitelist (v1.5.0 periods)', () => {
     expect(journalQuerySchema.safeParse({ range: 'month' }).success).toBe(true)
     expect(journalQuerySchema.safeParse({ range: 'today' }).success).toBe(true)
+    expect(journalQuerySchema.safeParse({ range: 'week' }).success).toBe(true)
+    expect(journalQuerySchema.safeParse({ range: 'all' }).success).toBe(true)
     expect(journalQuerySchema.safeParse({ range: 'custom' }).success).toBe(true)
     expect(journalQuerySchema.safeParse({ range: 'bogus' }).success).toBe(false)
-    expect(analyticsQuerySchema.safeParse({ range: '6m' }).success).toBe(true)
+    expect(journalQuerySchema.safeParse({ range: '6m' }).success).toBe(false)
     expect(analyticsQuerySchema.safeParse({ range: 'DROP TABLE' }).success).toBe(false)
   })
 

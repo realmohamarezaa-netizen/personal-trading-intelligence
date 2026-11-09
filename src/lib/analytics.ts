@@ -216,19 +216,14 @@ function profitFactor(gp: number, gl: number): number | null {
   return gp / gl
 }
 
-// ─── MT5-style analytics periods ─────────────────────────────────────────────
-// Range windows match the MetaTrader 5 history list (Today / Last 3 days /
-// Last week / Last month / Last 3 months / Last 6 months / Entire history)
-// and are calendar-aligned to the ACCOUNT timezone — "Today" starts at the
-// account's local midnight, "Last month" spans the trailing 30 calendar
-// days including today, and the 3/6-month windows subtract whole months.
-
-/** Trailing calendar days (including today) for the day-based ranges. */
-const RANGE_DAYS: Record<Exclude<RangeKey, 'all' | 'custom' | 'today' | '3m' | '6m'>, number> = {
-  '3d': 3,
-  week: 7,
-  month: 30,
-}
+// ─── Dashboard analytics periods ─────────────────────────────────────────
+            
+// v1.5.0 windows: Today / This week / This month / All time (+ explicit
+// custom window). All calendar-aligned to the ACCOUNT timezone — "Today"
+// starts at the account's local midnight, "This week" starts at local
+// midnight of the week's first day (Saturday — Iranian trading week,
+// consistent with the default Asia/Tehran account), "This month" starts on
+// the 1st of the current local month.
 
 /** Wall-clock Y/M/D of `d` in `tz`. */
 function ymdIn(tz: string, d: Date): { y: number; m: number; d: number } {
@@ -267,9 +262,9 @@ export function startOfDayIn(tz: string, d: Date): Date {
 }
 
 /**
- * Start of the analytics window for an MT5-style range key, aligned to the
- * account timezone. Returns null for 'all' / 'custom' (custom supplies its
- * own explicit window via EngineOptions.from).
+ * Start of the analytics window for a range key, aligned to the account
+ * timezone. Returns null for 'all' / 'custom' (custom supplies its own
+ * explicit window via EngineOptions).
  */
 export function rangeStartDate(range: RangeKey, tz: string, now: Date = new Date()): Date | null {
   switch (range) {
@@ -278,21 +273,24 @@ export function rangeStartDate(range: RangeKey, tz: string, now: Date = new Date
       return null
     case 'today':
       return startOfDayIn(tz, now)
-    case '3m':
-    case '6m': {
-      // subtract whole calendar months from today's local date, clamping the
-      // day (e.g. May 31 − 3 months → Feb 28/29), then take local midnight
-      const months = range === '3m' ? 3 : 6
+    case 'week': {
+      // Start of the current calendar week: local midnight of the most
+      // recent Saturday (Iranian week — Saturday→Friday), computed from the
+      // wall-clock date in the account timezone. Weekday is derived from
+      // that civil date itself (getUTCDay is tz-independent for a date).
       const { y, m, d } = ymdIn(tz, now)
-      const total = y * 12 + (m - 1) - months
-      const y2 = Math.floor(total / 12)
-      const m2 = ((total % 12) + 12) % 12 + 1
-      const daysInMonth = new Date(Date.UTC(y2, m2, 0)).getUTCDate()
-      return wallClockToUtc(tz, y2, m2, Math.min(d, daysInMonth), 0, 0)
+      const dow = new Date(Date.UTC(y, m - 1, d, 12)).getUTCDay() // Sun=0..Sat=6
+      const daysSinceSaturday = (dow + 1) % 7 // Sun→1 … Fri→6, Sat→0
+      const start = new Date(Date.UTC(y, m - 1, d - daysSinceSaturday))
+      const sy = start.getUTCFullYear()
+      const sm = start.getUTCMonth() + 1
+      const sd = start.getUTCDate()
+      return wallClockToUtc(tz, sy, sm, sd, 0, 0)
     }
-    default: {
-      const days = RANGE_DAYS[range]
-      return startOfDayIn(tz, new Date(now.getTime() - (days - 1) * 864e5))
+    case 'month': {
+      // 1st of the current local month, 00:00
+      const { y, m } = ymdIn(tz, now)
+      return wallClockToUtc(tz, y, m, 1, 0, 0)
     }
   }
 }

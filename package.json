@@ -1,6 +1,6 @@
 {
   "name": "personal-trading-intelligence",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "private": true,
   "description": "Local-first, read-only MetaTrader 5 trading analytics dashboard — Next.js 16, Persian RTL, dark UI",
   "scripts": {

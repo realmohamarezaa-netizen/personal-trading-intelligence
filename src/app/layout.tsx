@@ -19,6 +19,15 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
+      <head>
+        {/* Apply the stored theme (v1.5.0) before first paint — no palette flash */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "try{var t=localStorage.getItem('pti.theme');if(t)document.documentElement.setAttribute('data-theme',t)}catch(e){}",
+          }}
+        />
+      </head>
       <body className="antialiased bg-background text-foreground">
         {children}
         <Toaster />

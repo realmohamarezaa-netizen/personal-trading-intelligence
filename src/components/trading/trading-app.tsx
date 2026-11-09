@@ -27,6 +27,7 @@ import {
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
+  Palette,
   X,
 } from 'lucide-react'
 import type { AnalyticsData, RangeKey } from '@/lib/types'
@@ -34,8 +35,17 @@ import { fetchAnalytics, fetchMt5Status, fetchSettings, launchMt5Connector } fro
 import type { Mt5Status } from '@/lib/api-client'
 import { currencySymbol } from '@/lib/format'
 import { APP_VERSION } from '@/lib/app-info'
+import { THEMES, useTheme } from '@/lib/themes'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
 import { Providers } from './providers'
@@ -335,9 +345,12 @@ function friendlyError(err: unknown): string {
 
 function AppInner() {
   const [section, setSection] = useState<SectionKey>('overview')
-  // v1.3.3: 'all' (Entire history) removed from the selector — default to the
-  // broadest remaining window (Last 6 months)
-  const [range, setRange] = useState<RangeKey>('6m')
+  // v1.5.0: dark theme pack — quick switcher lives in the topbar, full
+  // gallery in Settings → Appearance
+  const { theme, setTheme } = useTheme()
+  // v1.5.0: 'All time' is back in the selector — it is the broadest window
+  // and the natural default for the first dashboard paint
+  const [range, setRange] = useState<RangeKey>('all')
   const [symbol, setSymbol] = useState('')
   const [accountId, setAccountId] = useState('')
   // Custom window (range === 'custom'); defaults cover the last 30 days
@@ -527,10 +540,10 @@ function AppInner() {
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
-      {/* Ambient background glows */}
+      {/* Ambient background glows (theme-aware — see --glow-a/--glow-b) */}
       <div aria-hidden className="pointer-events-none fixed inset-0 z-0">
-        <div className="absolute -top-40 left-1/4 h-96 w-96 rounded-full bg-[oklch(0.75_0.135_232/0.05)] blur-[120px]" />
-        <div className="absolute bottom-0 right-0 h-80 w-80 rounded-full bg-[oklch(0.77_0.15_162/0.04)] blur-[120px]" />
+        <div className="absolute -top-40 left-1/4 h-96 w-96 rounded-full bg-[var(--glow-a)] blur-[120px]" />
+        <div className="absolute bottom-0 right-0 h-80 w-80 rounded-full bg-[var(--glow-b)] blur-[120px]" />
       </div>
 
       <div className="relative z-10 flex flex-1">
@@ -630,6 +643,46 @@ function AppInner() {
                 <span className="hidden text-xs text-muted-foreground md:inline">· {activeMeta.fa}</span>
               </div>
               <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+                {/* v1.5.0: quick theme switcher */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      aria-label="Change theme"
+                      title="Theme / پوسته"
+                    >
+                      <Palette className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="min-w-44">
+                    <DropdownMenuLabel className="text-xs text-muted-foreground">
+                      Theme · پوسته
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {THEMES.map((t) => (
+                      <DropdownMenuItem
+                        key={t.key}
+                        onClick={() => setTheme(t.key)}
+                        className={cn('gap-2.5 text-xs', theme === t.key && 'bg-primary/10')}
+                      >
+                        <span
+                          aria-hidden
+                          className="h-3.5 w-3.5 shrink-0 rounded-full border border-white/20"
+                          style={{
+                            background: `linear-gradient(135deg, ${t.swatch.primary} 0 50%, ${t.swatch.accent} 50% 100%)`,
+                          }}
+                        />
+                        <span className="flex-1">{t.name}</span>
+                        <span className="text-[10px] text-muted-foreground" dir="rtl">
+                          {t.fa}
+                        </span>
+                        {theme === t.key && <span className="text-[10px] text-primary">●</span>}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <TehranClock />
                 {showConnect && (
                   <Button

@@ -14,9 +14,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
-// MT5 history-window periods (MetaTrader 5 defaults) + explicit custom window
-// (v1.3.3: 'all' / Entire history removed from the selector per user request)
-const RANGES: RangeKey[] = ['today', '3d', 'week', 'month', '3m', '6m', 'custom']
+// Dashboard periods (v1.5.0) + explicit custom window at the end
+const RANGES: RangeKey[] = ['today', 'week', 'month', 'all', 'custom']
 
 export function RangeFilter({
   value,

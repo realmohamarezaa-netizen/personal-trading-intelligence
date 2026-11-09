@@ -54,6 +54,13 @@
   --neg: oklch(0.71 0.19 14);
   --warn: oklch(0.83 0.16 84);
   --info: oklch(0.75 0.13 232);
+  /* Per-theme accent variables (v1.5.0): scrollbar hover gradient + ambient
+     background glows. Emerald (default) values; overridden per data-theme. */
+  --scroll-grad-a: oklch(0.80 0.13 165);
+  --scroll-grad-b: oklch(0.64 0.11 195);
+  --scroll-glow: oklch(0.77 0.15 162 / 35%);
+  --glow-a: oklch(0.75 0.135 232 / 0.05);
+  --glow-b: oklch(0.77 0.15 162 / 0.04);
   /* The app is dark-only — tells the browser to render native widgets
      (and the fallback scrollbar) in dark mode as well */
   color-scheme: dark;
@@ -92,6 +99,120 @@
   --sidebar-accent-foreground: oklch(0.93 0.012 250);
   --sidebar-border: oklch(1 0 0 / 7%);
   --sidebar-ring: oklch(0.75 0.135 232 / 55%);
+}
+
+/* ─── v1.5.0 dark theme pack ─────────────────────────────────────────────
+   Three extra dark palettes selectable via data-theme on <html>
+   (src/lib/themes.ts). Each block overrides ONLY the variables that change;
+   everything else (border, input, destructive, pos/neg…) inherits from the
+   .dark defaults above. The default 'Emerald Night' needs no attribute. */
+
+/* Royal Violet — deep aubergine surfaces, violet primary, magenta charts */
+[data-theme='violet'] {
+  --background: oklch(0.155 0.032 300);
+  --foreground: oklch(0.94 0.012 300);
+  --card: oklch(0.195 0.035 300);
+  --card-foreground: oklch(0.94 0.012 300);
+  --popover: oklch(0.20 0.035 300);
+  --popover-foreground: oklch(0.94 0.012 300);
+  --primary: oklch(0.74 0.17 305);
+  --primary-foreground: oklch(0.16 0.05 300);
+  --secondary: oklch(0.26 0.035 298);
+  --secondary-foreground: oklch(0.94 0.012 300);
+  --muted: oklch(0.25 0.03 298);
+  --muted-foreground: oklch(0.70 0.025 295);
+  --accent: oklch(0.28 0.045 298);
+  --accent-foreground: oklch(0.94 0.012 300);
+  --ring: oklch(0.74 0.17 305 / 55%);
+  --chart-1: oklch(0.74 0.17 305);
+  --chart-2: oklch(0.75 0.14 330);
+  --chart-3: oklch(0.80 0.12 210);
+  --chart-4: oklch(0.83 0.16 84);
+  --chart-5: oklch(0.77 0.15 162);
+  --sidebar: oklch(0.135 0.03 300);
+  --sidebar-foreground: oklch(0.91 0.012 300);
+  --sidebar-primary: oklch(0.74 0.17 305);
+  --sidebar-primary-foreground: oklch(0.16 0.05 300);
+  --sidebar-accent: oklch(0.23 0.035 298);
+  --sidebar-accent-foreground: oklch(0.94 0.012 300);
+  --sidebar-ring: oklch(0.74 0.17 305 / 55%);
+  --scroll-grad-a: oklch(0.76 0.15 305);
+  --scroll-grad-b: oklch(0.70 0.13 330);
+  --scroll-glow: oklch(0.74 0.17 305 / 35%);
+  --glow-a: oklch(0.74 0.17 305 / 0.06);
+  --glow-b: oklch(0.75 0.14 330 / 0.045);
+}
+
+/* Crimson Dusk — warm charcoal surfaces, rose primary, ember charts */
+[data-theme='crimson'] {
+  --background: oklch(0.155 0.022 20);
+  --foreground: oklch(0.94 0.01 20);
+  --card: oklch(0.195 0.025 20);
+  --card-foreground: oklch(0.94 0.01 20);
+  --popover: oklch(0.20 0.025 20);
+  --popover-foreground: oklch(0.94 0.01 20);
+  --primary: oklch(0.72 0.19 15);
+  --primary-foreground: oklch(0.17 0.05 15);
+  --secondary: oklch(0.26 0.025 25);
+  --secondary-foreground: oklch(0.94 0.01 20);
+  --muted: oklch(0.25 0.022 25);
+  --muted-foreground: oklch(0.70 0.02 30);
+  --accent: oklch(0.28 0.03 25);
+  --accent-foreground: oklch(0.94 0.01 20);
+  --ring: oklch(0.72 0.19 15 / 55%);
+  --chart-1: oklch(0.72 0.19 15);
+  --chart-2: oklch(0.78 0.14 55);
+  --chart-3: oklch(0.78 0.12 185);
+  --chart-4: oklch(0.83 0.16 84);
+  --chart-5: oklch(0.70 0.16 330);
+  --sidebar: oklch(0.135 0.02 20);
+  --sidebar-foreground: oklch(0.91 0.01 20);
+  --sidebar-primary: oklch(0.72 0.19 15);
+  --sidebar-primary-foreground: oklch(0.17 0.05 15);
+  --sidebar-accent: oklch(0.23 0.025 25);
+  --sidebar-accent-foreground: oklch(0.94 0.01 20);
+  --sidebar-ring: oklch(0.72 0.19 15 / 55%);
+  --scroll-grad-a: oklch(0.74 0.16 15);
+  --scroll-grad-b: oklch(0.70 0.14 45);
+  --scroll-glow: oklch(0.72 0.19 15 / 35%);
+  --glow-a: oklch(0.72 0.19 15 / 0.055);
+  --glow-b: oklch(0.78 0.14 55 / 0.04);
+}
+
+/* Solar Amber — warm bronze surfaces, golden primary, sunset charts */
+[data-theme='amber'] {
+  --background: oklch(0.16 0.02 70);
+  --foreground: oklch(0.94 0.012 80);
+  --card: oklch(0.20 0.024 70);
+  --card-foreground: oklch(0.94 0.012 80);
+  --popover: oklch(0.205 0.024 70);
+  --popover-foreground: oklch(0.94 0.012 80);
+  --primary: oklch(0.80 0.15 78);
+  --primary-foreground: oklch(0.18 0.05 70);
+  --secondary: oklch(0.26 0.024 70);
+  --secondary-foreground: oklch(0.94 0.012 80);
+  --muted: oklch(0.25 0.02 70);
+  --muted-foreground: oklch(0.70 0.02 75);
+  --accent: oklch(0.28 0.028 70);
+  --accent-foreground: oklch(0.94 0.012 80);
+  --ring: oklch(0.80 0.15 78 / 55%);
+  --chart-1: oklch(0.80 0.15 78);
+  --chart-2: oklch(0.75 0.15 45);
+  --chart-3: oklch(0.77 0.15 152);
+  --chart-4: oklch(0.71 0.19 20);
+  --chart-5: oklch(0.75 0.13 232);
+  --sidebar: oklch(0.14 0.018 70);
+  --sidebar-foreground: oklch(0.91 0.012 80);
+  --sidebar-primary: oklch(0.80 0.15 78);
+  --sidebar-primary-foreground: oklch(0.18 0.05 70);
+  --sidebar-accent: oklch(0.23 0.022 70);
+  --sidebar-accent-foreground: oklch(0.94 0.012 80);
+  --sidebar-ring: oklch(0.80 0.15 78 / 55%);
+  --scroll-grad-a: oklch(0.82 0.14 78);
+  --scroll-grad-b: oklch(0.72 0.13 55);
+  --scroll-glow: oklch(0.80 0.15 78 / 35%);
+  --glow-a: oklch(0.80 0.15 78 / 0.055);
+  --glow-b: oklch(0.75 0.15 45 / 0.04);
 }
 
 @layer base {
@@ -155,9 +276,9 @@
   }
   .scroll-slim::-webkit-scrollbar-thumb:hover {
     background-color: transparent;
-    background-image: linear-gradient(180deg, oklch(0.80 0.13 165), oklch(0.64 0.11 195));
+    background-image: linear-gradient(180deg, var(--scroll-grad-a), var(--scroll-grad-b));
     background-clip: padding-box;
-    box-shadow: 0 0 8px oklch(0.77 0.15 162 / 30%);
+    box-shadow: 0 0 8px var(--scroll-glow);
   }
 }
 
@@ -180,14 +301,14 @@
 }
 ::-webkit-scrollbar-thumb:hover {
   background-color: transparent;
-  background-image: linear-gradient(180deg, oklch(0.80 0.13 165), oklch(0.64 0.11 195));
+  background-image: linear-gradient(180deg, var(--scroll-grad-a), var(--scroll-grad-b));
   background-clip: padding-box;
-  box-shadow: 0 0 10px oklch(0.77 0.15 162 / 35%);
+  box-shadow: 0 0 10px var(--scroll-glow);
 }
 ::-webkit-scrollbar-thumb:active {
-  background-image: linear-gradient(180deg, oklch(0.85 0.14 165), oklch(0.70 0.12 195));
+  background-image: linear-gradient(180deg, var(--scroll-grad-a), var(--scroll-grad-b));
   background-clip: padding-box;
-  box-shadow: 0 0 12px oklch(0.77 0.15 162 / 45%);
+  box-shadow: 0 0 12px var(--scroll-glow);
 }
 ::-webkit-scrollbar-corner {
   background: transparent;

@@ -126,9 +126,9 @@ export const settingsPatchSchema = z
   .strict()
 
 // ─── Analytics / journal query params ────────────────────────────────────────
-// MT5-style periods: Today / Last 3 days / Last week / Last month /
-// Last 3 months / Last 6 months / Entire history (+ explicit custom window).
-export const rangeKeys = ['today', '3d', 'week', 'month', '3m', '6m', 'all'] as const
+// v1.5.0 periods: Today / This week / This month / All time (+ explicit
+// custom window).
+export const rangeKeys = ['today', 'week', 'month', 'all'] as const
 export const analyticsQuerySchema = z.object({
   range: z.enum([...rangeKeys, 'custom']).default('all'),
   symbol: z.string().max(64).optional(),
