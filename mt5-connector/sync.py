@@ -21,7 +21,10 @@ v1.3.0 semantics (matches prisma Trade model):
   * positions opened before the history window are healed with
     ``history_deals_get(position=…)``; if the broker cannot restore the
     entry, the leg is flagged ``incompleteHistory`` instead of being
-    silently mispriced.
+    silently mispriced;
+  * the payload carries ``positionsRead`` — True only when ``positions_get()``
+    actually succeeded — so the dashboard can treat the open-position set as
+    authoritative and finalize stale OPEN rows it can no longer see.
 
 Usage:
     python sync.py --test                       # connect, print summary, send nothing
@@ -716,12 +719,19 @@ def run_sync(args: argparse.Namespace) -> bool:
         if mode_name == "DEMO":
             _log(f"connected to a DEMO account (login {info.login}) — its data stays fully separate from real accounts")
 
-        # ── Open positions (live) ────────────────────────────────────────────
+        # ── Open positions (live) ────────────────────────────────────────
+        # positions_get() returning a tuple (possibly EMPTY) is the complete,
+        # authoritative truth about what is open RIGHT NOW. None means the
+        # read itself failed — the dashboard then must NOT reconcile its
+        # OPEN rows against an empty set (that would close live positions).
+        positions_read = False
         positions_raw = mt5.positions_get()
         if positions_raw is None:
             code, desc = mt5.last_error()
             _err(f"positions_get() failed: ({code}) {desc} — continuing without open positions")
             positions_raw = []
+        else:
+            positions_read = True
 
         # ── Dealing history ──────────────────────────────────────────────────
         now = datetime.now(timezone.utc)
@@ -817,6 +827,9 @@ def run_sync(args: argparse.Namespace) -> bool:
             "trades": [asdict(t) for t in trades],
             "cashflows": [asdict(c) for c in merged.cashflows],
             "snapshot": snapshot,
+            # Authoritative-open-set flag (v1.3.7): when True the dashboard may
+            # finalize every OPEN row that is absent from this payload's live set.
+            "positionsRead": positions_read,
         }
         url = args.api.rstrip("/") + SYNC_PATH
         _log(

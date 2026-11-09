@@ -85,6 +85,10 @@ export const syncBodySchema = z.object({
       equity: finite('equity').min(-1e15).max(1e15).optional(),
     })
     .optional(),
+  // v1.3.7 — authoritative open-set flag: True only when the connector's
+  // positions_get() actually succeeded (an empty tuple is a valid result).
+  // Absent ⇒ legacy connector ⇒ the dashboard keeps its conservative behaviour.
+  positionsRead: z.boolean().optional(),
 })
 
 export type ValidatedSyncBody = z.output<typeof syncBodySchema>

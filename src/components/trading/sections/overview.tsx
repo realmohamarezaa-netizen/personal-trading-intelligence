@@ -578,7 +578,7 @@ export function OverviewSection({
         <Panel
           className="lg:col-span-2"
           title="Open Positions"
-          description="موقعیت‌های باز و سود/زیان شناور"
+          description="موقعیت‌های باز و سود/زیان شناور — همیشه مطابق آخرین همگام‌سازی MT5"
         >
           {data.openPositions.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-2 py-10 text-center">

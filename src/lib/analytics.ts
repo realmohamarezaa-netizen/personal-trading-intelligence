@@ -314,7 +314,10 @@ export function computeAnalytics(
   const allClosed = input.trades
     .filter((t) => t.status === 'CLOSED' && t.closeTime)
     .sort((a, b) => a.closeTime!.getTime() - b.closeTime!.getTime())
-  const allOpen = input.trades.filter((t) => t.status === 'OPEN')
+  // Open = status OPEN without a close time. A row carrying BOTH is corrupt
+  // by definition (defense-in-depth: such a row must never inflate the
+  // floating P/L or appear in the Open Positions panel).
+  const allOpen = input.trades.filter((t) => t.status === 'OPEN' && !t.closeTime)
 
   const matches = (t: EngineTrade): boolean => !opts.symbol || t.symbol === opts.symbol
 

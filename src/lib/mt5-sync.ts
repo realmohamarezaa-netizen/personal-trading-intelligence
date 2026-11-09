@@ -15,6 +15,13 @@
 //   * When a position fully closes, its OPEN shell row is removed — its
 //     realized history lives in the legs. The shell row is derived state
 //     (recreated from live positions on every sync), not user data.
+//   * v1.3.7 — AUTHORITATIVE OPEN-SET RECONCILIATION: when the connector
+//     reports positionsRead=true, its positions_get() result is the complete
+//     truth about what is open right now, so every OPEN shell row outside
+//     that set is finalized immediately. Previously a shell whose closing
+//     deal never reached any payload (terminal deal cache unavailable, close
+//     outside the history window, legacy ticket drift) stayed in "Open
+//     Positions" forever with a frozen floating P/L.
 //
 // Every non-trade MT5 deal arrives as a categorized cashflow (externalId =
 // deal ticket) — including CREDIT, which the balance reconciliation
@@ -353,7 +360,44 @@ export async function processSyncPayload(
             positionTicket: { in: fullyClosed.map((pid) => BigInt(pid)) },
           },
         })
-        openRowsClosed = del.count
+        openRowsClosed += del.count
+      }
+
+      // ── 4b. authoritative open-set reconciliation (v1.3.7) ──────────────
+      // positionsRead=true means positions_get() SUCCEEDED, so the payload's
+      // live set is complete: every OPEN shell row not in it belongs to a
+      // position that is no longer open — even when its closing deal never
+      // reached us (broken terminal deal cache, close outside the history
+      // window, legacy id drift). Such rows used to linger in the Open
+      // Positions panel with a frozen floating P/L. Shells are derived state
+      // (rebuilt from live positions on the next cycle), so finalizing them
+      // here can never lose user data.
+      if (body.positionsRead === true) {
+        if (livePositionTickets.size === 0) {
+          // no open positions at all — finalize every OPEN shell of the account
+          const del = await tx.trade.deleteMany({
+            where: { accountId, status: 'OPEN', dealTicket: null },
+          })
+          openRowsClosed += del.count
+        } else {
+          const live = [...livePositionTickets].map((pid) => BigInt(pid))
+          const stale = await tx.trade.deleteMany({
+            where: {
+              accountId,
+              status: 'OPEN',
+              dealTicket: null,
+              positionTicket: { notIn: live },
+            },
+          })
+          openRowsClosed += stale.count
+          // SQL NULL semantics: NOT IN never matches NULL tickets, so any
+          // unusable NULL-ticket OPEN row (never produced by the current
+          // connector) is finalized separately.
+          const nullTicket = await tx.trade.deleteMany({
+            where: { accountId, status: 'OPEN', dealTicket: null, positionTicket: null },
+          })
+          openRowsClosed += nullTicket.count
+        }
       }
 
       // ── 5. cashflows (idempotent by external deal ticket) ────────────────
